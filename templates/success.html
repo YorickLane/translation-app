@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Translation Successful</title>
+</head>
+<body>
+    <h1>Translation Successful!</h1>
+    <p>Your translated file is ready.</p>
+    {% for file_path in file_paths %}
+    <a href="{{ file_path }}">Download Translated File for {{ file_path.split('/')[-1].split('.')[0] }}</a><br>
+    {% endfor %} 
+</body>
+</html>

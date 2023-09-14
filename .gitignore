@@ -1,0 +1,10 @@
+/output/
+/uploads/
+/universal-team-395508-399550064d46.json
+venv/
+/venv/
+get-pip.py
+__pycache__/
+*.pyc
+
+.vscode/
