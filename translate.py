@@ -48,10 +48,11 @@ def translate_locale_file(source_file_path, target_language="en"):
         translated_value = translate_text(value.strip(), target_language)
         translated_key_value_pairs.append((key, translated_value))
 
-    # Construct the translated content
-    translated_content = []
+    # Construct the translated content with the export default structure
+    translated_content = ["export default {\n"]
     for key, value in translated_key_value_pairs:
-        translated_content.append(f'{key}: "{value}",\n')
+        translated_content.append(f'  {key}: "{value}",\n')
+    translated_content.append("};\n")
 
     output_extension = source_file_path.split(".")[-1]
     output_file_name = f"{target_language}.{output_extension}"
