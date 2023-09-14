@@ -17,6 +17,8 @@ def translate_text(text, target_language="en"):
         text.replace("“", "<START_QUOTE>")
         .replace("”", "<END_QUOTE>")
         .replace(":", "<COLON>")
+        .replace("'", "<SINGLE_QUOTE>")
+        .replace('"', "<DOUBLE_QUOTE>")
     )
 
     translation = translate_client.translate(text, target_language=target_language)
@@ -29,6 +31,8 @@ def translate_text(text, target_language="en"):
         translation.replace("<START_QUOTE>", "“")
         .replace("<END_QUOTE>", "”")
         .replace("<COLON>", ":")
+        .replace("<SINGLE_QUOTE>", "'")
+        .replace("<DOUBLE_QUOTE>", '"')
     )
 
     return translation
