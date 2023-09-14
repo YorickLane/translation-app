@@ -68,7 +68,7 @@ def translate_locale_file(source_file_path, target_language="en"):
 
         # If we are inside a multi-line value, continue appending
         if in_multiline_value:
-            multiline_value += stripped_line
+            multiline_value += " " + stripped_line
             if (
                 stripped_line.endswith(",")
                 or stripped_line.endswith("'")
@@ -81,6 +81,16 @@ def translate_locale_file(source_file_path, target_language="en"):
                 key_value_pairs.append((multiline_key, translated_value))
                 multiline_key = ""
                 multiline_value = ""
+            continue
+
+        # If the line contains a colon but doesn't end with a typical string delimiter, it's likely the start of a multi-line value
+        if ":" in line and not (
+            line.endswith(",") or line.endswith("'") or line.endswith("`")
+        ):
+            key, value = [item.strip() for item in line.split(":", 1)]
+            multiline_key = key
+            multiline_value = value
+            in_multiline_value = True
             continue
 
         # If the line doesn't contain a colon, continue to the next line
