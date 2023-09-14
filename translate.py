@@ -12,27 +12,36 @@ translate_client = translate.Client()
 
 def translate_text(text, target_language="en"):
     """Translates a text to the target language using Google Cloud Translation."""
-
-    # Pre-process to handle special characters
-    replacements = {
-        "“": "<START_QUOTE>",
-        "”": "<END_QUOTE>",
-        ":": "<COLON>",
-        "'": "<SINGLE_QUOTE>",
-        '"': "<DOUBLE_QUOTE>",
-    }
-    for key, value in replacements.items():
-        text = text.replace(key, value)
+    # Replace special quotation marks and colon with placeholders
+    text = (
+        text.replace("“", "<START_QUOTE>")
+        .replace("”", "<END_QUOTE>")
+        .replace(":", "<COLON>")
+        .replace("'", "<SINGLE_QUOTE>")
+        .replace('"', "<DOUBLE_QUOTE>")
+    )
 
     translation = translate_client.translate(text, target_language=target_language)
 
-    # Post-process to replace placeholders with actual characters
-    for value, key in replacements.items():
-        translation["translatedText"] = translation["translatedText"].replace(
-            key, value
-        )
+    # Post-process to replace HTML encoded characters, placeholders with actual characters and fix the colon
+    translation = (
+        translation["translatedText"]
+        .replace("&#39;", "'")
+        .replace("&quot;", '"')
+        .replace("&amp;", "&")
+    )
+    translation = (
+        translation.replace("<START_QUOTE>", "“")
+        .replace("<END_QUOTE>", "”")
+        .replace("<COLON>", ":")
+        .replace("<SINGLE_QUOTE>", "'")
+        .replace("<DOUBLE_QUOTE>", '"')
+    )
 
-    return translation["translatedText"]
+    # Capitalize the first letter
+    translation = translation[0].upper() + translation[1:]
+
+    return translation
 
 
 def translate_locale_file(source_file_path, target_language="en"):
