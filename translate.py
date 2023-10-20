@@ -50,7 +50,10 @@ def translate_locale_file(source_file_path, target_language="en"):
     with open(source_file_path, "r", encoding="utf-8") as f:
         content = f.read()
 
-    key_value_pairs = re.findall(r"(\w+):\s*['\"](.*?)['\"]", content, re.DOTALL)
+    key_value_pairs = re.findall(
+        r"(['\"]?[^\s:]+['\"]?):\s*['\"](.*?)['\"]", content, re.DOTALL
+    )
+
     translated_key_value_pairs = []
 
     for key, value in key_value_pairs:
