@@ -43,6 +43,9 @@ def translate_text(text, target_language="en"):
     # Capitalize the first letter
     translation = translation[0].upper() + translation[1:]
 
+    # Remove unnecessary quotation marks
+    translation = translation.replace('"', "")
+
     return translation
 
 
