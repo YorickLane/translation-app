@@ -13,8 +13,10 @@ from google.cloud import translate_v2 as translate
 import datetime
 from flask_socketio import SocketIO, emit
 from time import sleep
+from config import SECRET_KEY
 
 app = Flask(__name__)
+app.secret_key = SECRET_KEY
 logging.basicConfig(level=logging.DEBUG)
 socketio = SocketIO(app)
 
@@ -61,62 +63,66 @@ def uploaded_file(filename):
 
 @app.route("/translate", methods=["POST"])
 def translate_file_route():
-    # Handle file upload
-    if "file" not in request.files:
-        flash("No file part")
-        return redirect("/")
+    try:
+        # Check if the file part is in the request
+        if "file" not in request.files:
+            flash("No file part")
+            return redirect("/")
 
-    file = request.files["file"]
+        file = request.files["file"]
 
-    if file.filename == "":
-        flash("No selected file")
-        return redirect("/")
+        # If the user does not select a file, the browser submits an empty file without a filename
+        if file.filename == "":
+            flash("No selected file")
+            return redirect("/")
 
-    if not allowed_file(file.filename):
-        flash("Invalid file type")
-        return redirect("/")
+        if not allowed_file(file.filename):
+            flash("Invalid file type")
+            return redirect("/")
 
-    filename = secure_filename(file.filename)
-    saved_file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-    file.save(saved_file_path)
+        filename = secure_filename(file.filename)
+        saved_file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        file.save(saved_file_path)
+        print(f"File saved to: {saved_file_path}")
 
-    # Get target languages
-    target_languages = request.form.getlist("languages")
+        # Get target languages
+        target_languages = request.form.getlist("languages")
 
-    if not target_languages:
-        flash("No target languages selected")
-        return redirect("/")
+        if not target_languages:
+            flash("No target languages selected")
+            return redirect("/")
 
-    output_files = []
-    total_languages = len(target_languages)
-    for index, target_language in enumerate(target_languages):
-        try:
-            output_file_name = translate_file(
-                saved_file_path, target_language
-            )  # Use translate_file instead of translate_locale_file
+        output_files = []
+        total_languages = len(target_languages)
+        for index, target_language in enumerate(target_languages):
+            print(f"Starting translation for {target_language}...")
+            output_file_name = translate_file(saved_file_path, target_language)
             output_files.append(os.path.join(OUTPUT_FOLDER, output_file_name))
+            print(
+                f"Translation to {target_language} completed. Output file: {output_file_name}"
+            )
 
             # Emitting progress
             progress = (index + 1) / total_languages * 100
             socketio.emit("progress", {"progress": progress}, namespace="/test")
+            sleep(1)  # Simulating some delay for demonstration purposes
 
-            # Simulating some delay for demonstration purposes
-            sleep(1)
+        # Create a ZIP archive from translated files
+        zip_name = f"translations_{filename}.zip"
+        zip_path = os.path.join(OUTPUT_FOLDER, zip_name)
+        create_zip(output_files, zip_path)
+        print(f"ZIP file created at: {zip_path}")
 
-        except Exception as e:
-            flash(f"Error translating to {target_language}: {e}")
-            return redirect("/")
+        # Remove individual files after adding to ZIP
+        for output_file in output_files:
+            os.remove(output_file)
 
-    # Create a ZIP archive from translated files
-    zip_name = f"translations_{filename}.zip"
-    zip_path = os.path.join(OUTPUT_FOLDER, zip_name)
-    create_zip(output_files, zip_path)
+        return render_template("success.html", zip_path="/output/" + zip_name)
 
-    # Remove individual files after adding to ZIP
-    for output_file in output_files:
-        os.remove(output_file)
-
-    return render_template("success.html", zip_path="/output/" + zip_name)
+    except Exception as e:
+        print(f"An error occurred during file translation: {e}")
+        flash(f"An error occurred during file translation: {e}")
+        return redirect("/")
 
 
 @socketio.on("connect", namespace="/test")

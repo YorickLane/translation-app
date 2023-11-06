@@ -23,30 +23,36 @@ def translate_text(text, target_language="en"):
         .replace('"', "<DOUBLE_QUOTE>")
     )
 
-    translation = translate_client.translate(text, target_language=target_language)
+    try:
+        translation = translate_client.translate(text, target_language=target_language)
+        translation_text = translation.get("translatedText", "")
 
-    # Post-process to replace HTML encoded characters, placeholders with actual characters and fix the colon
-    translation = (
-        translation["translatedText"]
-        .replace("&#39;", "'")
-        .replace("&quot;", '"')
-        .replace("&amp;", "&")
-    )
-    translation = (
-        translation.replace("<START_QUOTE>", "“")
-        .replace("<END_QUOTE>", "”")
-        .replace("<COLON>", ":")
-        .replace("<SINGLE_QUOTE>", "'")
-        .replace("<DOUBLE_QUOTE>", '"')
-    )
+        # Post-process to replace HTML encoded characters, placeholders with actual characters and fix the colon
+        translation_text = (
+            translation_text.replace("&#39;", "'")
+            .replace("&quot;", '"')
+            .replace("&amp;", "&")
+            .replace("<START_QUOTE>", "“")
+            .replace("<END_QUOTE>", "”")
+            .replace("<COLON>", ":")
+            .replace("<SINGLE_QUOTE>", "'")
+            .replace("<DOUBLE_QUOTE>", '"')
+        )
 
-    # Capitalize the first letter
-    translation = translation[0].upper() + translation[1:]
+        # Capitalize the first letter if the string is not empty
+        if translation_text:
+            translation_text = translation_text[0].upper() + translation_text[1:]
+        else:
+            print(f"Warning: Received empty translation for text: {text}")
 
-    # Remove unnecessary quotation marks
-    translation = translation.replace('"', "")
+        # Return the processed translation text
+        return translation_text
 
-    return translation
+    except Exception as e:
+        error_message = f"An error occurred during translation: {e}"
+        print(error_message)
+        # Depending on your error handling strategy, you might want to re-raise the error or return None
+        raise  # This will re-raise the last exception
 
 
 def translate_locale_file(source_file_path, target_language="en"):
@@ -54,22 +60,25 @@ def translate_locale_file(source_file_path, target_language="en"):
     with open(source_file_path, "r", encoding="utf-8") as f:
         content = f.read()
 
+    # Match key-value pairs with keys that might or might not be wrapped in quotes
     key_value_pairs = re.findall(
-        r"(['\"]?[^\s:]+['\"]?):\s*['\"](.*?)['\"]", content, re.DOTALL
+        r'(?:"([^"]+)"|([\w.]+)):\s*"(.*?)"', content, re.DOTALL
     )
 
     translated_key_value_pairs = []
 
-    for key, value in key_value_pairs:
+    for key1, key2, value in key_value_pairs:
+        key = key1 or key2  # key1 is the quoted key, key2 is the unquoted key
         translated_value = translate_text(value.strip(), target_language)
         translated_key_value_pairs.append((key, translated_value))
 
     # Construct the translated content with the export default structure
-    translated_content = ["export default {\n"]
+    translated_content = ["const lang = {\n"]
     for key, value in translated_key_value_pairs:
-        formatted_value = value.strip('"')
-        translated_content.append('  {}: "{}",\n'.format(key, formatted_value))
-    translated_content.append("};\n")
+        # Ensure keys are properly quoted
+        key = f'"{key}"' if not key.startswith('"') and not key.endswith('"') else key
+        translated_content.append(f'  {key}: "{value}",\n')
+    translated_content.append("};\n\nexport default lang;")
 
     output_extension = source_file_path.split(".")[-1]
     output_file_name = f"{target_language}.{output_extension}"

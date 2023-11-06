@@ -6,5 +6,6 @@ venv/
 get-pip.py
 __pycache__/
 *.pyc
+config.py
 
 .vscode/
