@@ -60,30 +60,27 @@ def translate_locale_file(source_file_path, target_language="en"):
     with open(source_file_path, "r", encoding="utf-8") as f:
         content = f.read()
 
-    # Match key-value pairs with keys that might or might not be wrapped in quotes
-    key_value_pairs = re.findall(
-        r'(?:"([^"]+)"|([\w.]+)):\s*"(.*?)"', content, re.DOTALL
-    )
+    # Updated regex to match your file structure
+    # The regex (\w+):\s*\'(.*?)\' is tailored to match keys without quotes and values within quotes
+    key_value_pairs = re.findall(r"(\w+):\s*\'(.*?)\'", content, re.DOTALL)
+
+    print(key_value_pairs)  # Debug: Check if the pairs are being captured
 
     translated_key_value_pairs = []
 
-    for key1, key2, value in key_value_pairs:
-        key = key1 or key2  # key1 is the quoted key, key2 is the unquoted key
+    for key, value in key_value_pairs:
         translated_value = translate_text(value.strip(), target_language)
         translated_key_value_pairs.append((key, translated_value))
 
-    # Construct the translated content with the export default structure
+    # Construct the translated content
     translated_content = ["const lang = {\n"]
     for key, value in translated_key_value_pairs:
-        # Ensure keys are properly quoted
-        key = f'"{key}"' if not key.startswith('"') and not key.endswith('"') else key
         translated_content.append(f'  {key}: "{value}",\n')
     translated_content.append("};\n\nexport default lang;")
 
-    output_extension = source_file_path.split(".")[-1]
-    output_file_name = f"{target_language}.{output_extension}"
+    output_file_name = f"{target_language}.js"
 
-    # Write to a new file based on the target language
+    # Write to a new file
     output_path = os.path.join("output", output_file_name)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("".join(translated_content))
