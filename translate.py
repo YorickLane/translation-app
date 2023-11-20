@@ -60,21 +60,25 @@ def translate_locale_file(source_file_path, target_language="en"):
     with open(source_file_path, "r", encoding="utf-8") as f:
         content = f.read()
 
-    # Updated regex to match your file structure
-    # The regex (\w+):\s*\'(.*?)\' is tailored to match keys without quotes and values within quotes
-    key_value_pairs = re.findall(r"(\w+):\s*\'(.*?)\'", content, re.DOTALL)
-
-    print(key_value_pairs)  # Debug: Check if the pairs are being captured
+    # Updated regex to handle single quotes, double quotes, and backticks
+    key_value_pairs = re.findall(r'(\w+):\s*(`.*?`|".*?"|\'.*?\')', content, re.DOTALL)
+    print(f"Found {len(key_value_pairs)} key-value pairs")  # Debugging
 
     translated_key_value_pairs = []
 
     for key, value in key_value_pairs:
-        translated_value = translate_text(value.strip(), target_language)
-        translated_key_value_pairs.append((key, translated_value))
+        try:
+            # Strip the quotes or backticks from the value before translation
+            cleaned_value = value.strip().strip("`\"'")
+            translated_value = translate_text(cleaned_value, target_language)
+            translated_key_value_pairs.append((key, translated_value))
+        except Exception as e:
+            print(f"Error translating {key}: {value}. Error: {e}")
 
     # Construct the translated content
     translated_content = ["const lang = {\n"]
     for key, value in translated_key_value_pairs:
+        # Use double quotes for consistency in the translated file
         translated_content.append(f'  {key}: "{value}",\n')
     translated_content.append("};\n\nexport default lang;")
 
