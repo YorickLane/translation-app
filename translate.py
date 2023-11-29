@@ -56,35 +56,37 @@ def translate_text(text, target_language="en"):
 
 
 def translate_locale_file(source_file_path, target_language="en"):
-    """Reads a locale JS file, translates the strings, and writes the translated content to a new file."""
     with open(source_file_path, "r", encoding="utf-8") as f:
         content = f.read()
 
-    # Updated regex to handle single quotes, double quotes, and backticks
-    key_value_pairs = re.findall(r'(\w+):\s*(`.*?`|".*?"|\'.*?\')', content, re.DOTALL)
-    print(f"Found {len(key_value_pairs)} key-value pairs")  # Debugging
+    print("File content (first 500 characters):", content[:500])
+
+    # Updated regex pattern to match a broader range of key characters
+    key_value_pairs = re.findall(
+        r'(\'[^\']+\'|[^\s:]+):\s*(`.*?`|".*?"|\'.*?\')', content, re.DOTALL
+    )
+    print(f"Found {len(key_value_pairs)} key-value pairs")
 
     translated_key_value_pairs = []
 
     for key, value in key_value_pairs:
+        key = key.strip("'")  # Remove single quotes from key if present
+
         try:
-            # Strip the quotes or backticks from the value before translation
             cleaned_value = value.strip().strip("`\"'")
             translated_value = translate_text(cleaned_value, target_language)
             translated_key_value_pairs.append((key, translated_value))
         except Exception as e:
             print(f"Error translating {key}: {value}. Error: {e}")
 
-    # Construct the translated content
-    translated_content = ["const lang = {\n"]
+    # Construct the translated content using "export default" format
+    translated_content = ["export default {\n"]
     for key, value in translated_key_value_pairs:
-        # Use double quotes for consistency in the translated file
-        translated_content.append(f'  {key}: "{value}",\n')
-    translated_content.append("};\n\nexport default lang;")
+        translated_content.append(f'  "{key}": "{value}",\n')
+    translated_content.append("};\n")
 
     output_file_name = f"{target_language}.js"
 
-    # Write to a new file
     output_path = os.path.join("output", output_file_name)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("".join(translated_content))
