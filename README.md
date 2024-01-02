@@ -1,4 +1,4 @@
-# Project Title: Translation Utility
+# Translation Utility
 
 ## Overview
 This Translation Utility is designed to automate the process of translating JavaScript and JSON files containing language strings. It utilizes the Google Cloud Translation API to translate text from one language to another, handling both quoted and unquoted keys in JavaScript object notation.
