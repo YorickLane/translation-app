@@ -27,7 +27,7 @@ ALLOWED_EXTENSIONS = {"json", "js"}
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 os.environ[
     "GOOGLE_APPLICATION_CREDENTIALS"
-] = "./universal-team-395508-399550064d46.json"
+] = "./serviceKey.json"
 
 # Google Translate Client
 translate_client = translate.Client()

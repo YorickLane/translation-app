@@ -3,7 +3,7 @@ uploads/*
 output/*
 !output/.gitkeep
 
-/universal-team-395508-399550064d46.json
+/serviceKey.json
 venv/
 /venv/
 get-pip.py

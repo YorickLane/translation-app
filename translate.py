@@ -8,7 +8,7 @@ from google.cloud import translate_v2 as translate
 # Initialize the client
 os.environ[
     "GOOGLE_APPLICATION_CREDENTIALS"
-] = "./universal-team-395508-399550064d46.json"
+] = "./serviceKey.json"
 translate_client = translate.Client()
 
 
