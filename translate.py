@@ -6,53 +6,72 @@ import re
 from google.cloud import translate_v2 as translate
 
 # Initialize the client
-os.environ[
-    "GOOGLE_APPLICATION_CREDENTIALS"
-] = "./serviceKey.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "./serviceKey.json"
 translate_client = translate.Client()
 
 
 def translate_text(text, target_language="en"):
-    """Translates a text to the target language using Google Cloud Translation."""
-    # Replace special quotation marks and colon with placeholders
-    text = (
-        text.replace("“", "<START_QUOTE>")
-        .replace("”", "<END_QUOTE>")
-        .replace(":", "<COLON>")
-        .replace("'", "<SINGLE_QUOTE>")
-        .replace('"', "<DOUBLE_QUOTE>")
+    """Translates text to the target language using Google Cloud Translation."""
+    # Define a placeholder for newlines to handle multiline strings properly.
+    newline_placeholder = "<NEWLINE>"
+    text = text.replace("\n", newline_placeholder)
+
+    # Regular expression to identify any custom color tags and their content
+    color_tag_pattern = re.compile(
+        r"(\[color-[^\]]+\])(.*?)(\[/color-[^\]]+\])", re.DOTALL
+    )
+    segments = []
+    last_end = 0
+    translated_text = ""
+
+    # Iterate over all matches
+    for match in color_tag_pattern.finditer(text):
+        start, end = match.span()
+        # Text before the tag starts
+        pre_tag_text = text[last_end:start]
+        if pre_tag_text:
+            pre_translation = translate_client.translate(
+                pre_tag_text, target_language=target_language
+            )
+            translated_text += pre_translation["translatedText"]
+
+        # The tag and content
+        opening_tag, inner_content, closing_tag = (
+            match.group(1),
+            match.group(2),
+            match.group(3),
+        )
+        translated_text += opening_tag  # add the opening tag as is
+
+        # Translate the inner content if it's not empty
+        if inner_content.strip():
+            inner_translation = translate_client.translate(
+                inner_content, target_language=target_language
+            )
+            translated_inner_content = inner_translation["translatedText"]
+            translated_text += translated_inner_content
+
+        translated_text += closing_tag  # add the closing tag as is
+
+        last_end = end
+
+    # Handle any remaining text after the last tag
+    if last_end < len(text):
+        remaining_text = text[last_end:]
+        remaining_translation = translate_client.translate(
+            remaining_text, target_language=target_language
+        )
+        translated_text += remaining_translation["translatedText"]
+
+    # Restore newlines and other HTML entities
+    translated_text = translated_text.replace(newline_placeholder, "\n")
+    translated_text = (
+        translated_text.replace("&#39;", "'")
+        .replace("&quot;", '"')
+        .replace("&amp;", "&")
     )
 
-    try:
-        translation = translate_client.translate(text, target_language=target_language)
-        translation_text = translation.get("translatedText", "")
-
-        # Post-process to replace HTML encoded characters, placeholders with actual characters and fix the colon
-        translation_text = (
-            translation_text.replace("&#39;", "'")
-            .replace("&quot;", '"')
-            .replace("&amp;", "&")
-            .replace("<START_QUOTE>", "“")
-            .replace("<END_QUOTE>", "”")
-            .replace("<COLON>", ":")
-            .replace("<SINGLE_QUOTE>", "'")
-            .replace("<DOUBLE_QUOTE>", '"')
-        )
-
-        # Capitalize the first letter if the string is not empty
-        if translation_text:
-            translation_text = translation_text[0].upper() + translation_text[1:]
-        else:
-            print(f"Warning: Received empty translation for text: {text}")
-
-        # Return the processed translation text
-        return translation_text
-
-    except Exception as e:
-        error_message = f"An error occurred during translation: {e}"
-        print(error_message)
-        # Depending on your error handling strategy, you might want to re-raise the error or return None
-        raise  # This will re-raise the last exception
+    return translated_text
 
 
 def translate_locale_file(source_file_path, target_language="en"):
