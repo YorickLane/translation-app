@@ -8,10 +8,10 @@
     var socket = io.connect(
       "http://" + document.domain + ":" + location.port + "/test",
       {
-    reconnection: true,
-    reconnectionAttempts: 10,
-    reconnectionDelay: 2000
-  }
+        reconnection: true,
+        reconnectionAttempts: 10,
+        reconnectionDelay: 2000,
+      }
     );
 
     socket.on("connect", function () {
@@ -37,7 +37,9 @@
       <label for="languages">Choose target language:</label>
       <select name="languages" id="languages" multiple>
         {% for lang in languages %}
-        <option value="{{ lang.code }}">{{ lang.name }} - {{ lang.code }}</option>
+        <option value="{{ lang.code }}">
+          {{ lang.name }} - {{ lang.code }}
+        </option>
         {% endfor %}
       </select>
       <br /><br />
@@ -45,5 +47,6 @@
     </form>
     <progress id="progressBar" value="0" max="100"></progress>
     <span id="progressText">0%</span><br /><br />
+    <pre>{{ languages }}</pre>
   </body>
 </html>

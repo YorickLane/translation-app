@@ -4,6 +4,8 @@ import json
 import zipfile
 import re
 from google.cloud import translate_v2 as translate
+from google.auth.exceptions import RefreshError
+
 
 # Initialize the client
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "./serviceKey.json"
@@ -14,7 +16,7 @@ def translate_text(text, target_language="en"):
     """Translates text to the target language using Google Cloud Translation."""
     # Define a placeholder for newlines to handle multiline strings properly.
     newline_placeholder = "<NEWLINE>"
-    text = text.replace("\n", newline_placeholder)
+    text = text.replace("\\n", newline_placeholder)
 
     # Regular expression to identify any custom color tags and their content
     color_tag_pattern = re.compile(
@@ -24,54 +26,52 @@ def translate_text(text, target_language="en"):
     last_end = 0
     translated_text = ""
 
-    # Iterate over all matches
-    for match in color_tag_pattern.finditer(text):
-        start, end = match.span()
-        # Text before the tag starts
-        pre_tag_text = text[last_end:start]
-        if pre_tag_text:
-            pre_translation = translate_client.translate(
-                pre_tag_text, target_language=target_language
+    try:
+        # Iterate over all matches
+        for match in color_tag_pattern.finditer(text):
+            start, end = match.span()
+            # Text before the tag starts
+            pre_tag_text = text[last_end:start]
+            if pre_tag_text:
+                pre_translation = translate_client.translate(
+                    pre_tag_text, target_language=target_language
+                )
+                translated_text += pre_translation["translatedText"]
+
+            # The tag and content
+            opening_tag, inner_content, closing_tag = (
+                match.group(1),
+                match.group(2),
+                match.group(3),
             )
-            translated_text += pre_translation["translatedText"]
+            translated_text += opening_tag  # add the opening tag as is
 
-        # The tag and content
-        opening_tag, inner_content, closing_tag = (
-            match.group(1),
-            match.group(2),
-            match.group(3),
-        )
-        translated_text += opening_tag  # add the opening tag as is
+            # Translate the inner content if it's not empty
+            if inner_content.strip():
+                inner_translation = translate_client.translate(
+                    inner_content, target_language=target_language
+                )
+                translated_inner_content = inner_translation["translatedText"]
+                translated_text += translated_inner_content
 
-        # Translate the inner content if it's not empty
-        if inner_content.strip():
-            inner_translation = translate_client.translate(
-                inner_content, target_language=target_language
+            translated_text += closing_tag  # add the closing tag as is
+
+            last_end = end
+
+        # Handle any remaining text after the last tag
+        if last_end < len(text):
+            remaining_text = text[last_end:]
+            remain_translation = translate_client.translate(
+                remaining_text, target_language=target_language
             )
-            translated_inner_content = inner_translation["translatedText"]
-            translated_text += translated_inner_content
+            translated_text += remain_translation["translatedText"]
 
-        translated_text += closing_tag  # add the closing tag as is
+    except RefreshError as e:
+        logging.error("Token refresh error during translation: %s", str(e))
+        # Handle token refresh logic, e.g., force a re-authentication or notify the user
+        return "Error in translation due to authentication issues."
 
-        last_end = end
-
-    # Handle any remaining text after the last tag
-    if last_end < len(text):
-        remaining_text = text[last_end:]
-        remaining_translation = translate_client.translate(
-            remaining_text, target_language=target_language
-        )
-        translated_text += remaining_translation["translatedText"]
-
-    # Restore newlines and other HTML entities
-    translated_text = translated_text.replace(newline_placeholder, "\n")
-    translated_text = (
-        translated_text.replace("&#39;", "'")
-        .replace("&quot;", '"')
-        .replace("&amp;", "&")
-    )
-
-    return translated_text
+    return translated_text.replace(newline_placeholder, "\n")
 
 
 def translate_locale_file(source_file_path, target_language="en"):

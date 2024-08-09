@@ -55,3 +55,5 @@ For support or queries, please contact [your-email@example.com](mailto:your-emai
 - Google Cloud Translation API
 - Flask and Flask-SocketIO contributors
 - All contributors and users of this project
+
+

@@ -14,6 +14,7 @@ import datetime
 from flask_socketio import SocketIO, emit
 from time import sleep
 from config import SECRET_KEY
+from google.auth.exceptions import RefreshError
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
@@ -25,9 +26,7 @@ UPLOAD_FOLDER = "uploads"
 OUTPUT_FOLDER = "output"
 ALLOWED_EXTENSIONS = {"json", "js"}
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-os.environ[
-    "GOOGLE_APPLICATION_CREDENTIALS"
-] = "./serviceKey.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "./serviceKey.json"
 
 # Google Translate Client
 translate_client = translate.Client()
@@ -38,12 +37,16 @@ LAST_CACHED = datetime.datetime.now()
 
 @lru_cache(maxsize=None)
 def get_supported_languages():
-    global LAST_CACHED
-    now = datetime.datetime.now()
-    if (now - LAST_CACHED).days > 30:
-        get_supported_languages.cache_clear()  # clear cache
-        LAST_CACHED = now  # update the timestamp
-    languages = translate_client.get_languages()
+    # now = datetime.datetime.now()
+    print("Fetching supported languages...")
+
+    try:
+        languages = translate_client.get_languages()
+    except RefreshError as e:
+        logging.error("Token refresh error: %s", str(e))
+        flash("There was an issue with authentication. Please try again later.")
+        return []
+
     return [{"name": lang["name"], "code": lang["language"]} for lang in languages]
 
 
