@@ -69,3 +69,4 @@ To prevent this issue from recurring:
 
 - [Google Cloud Authentication Error Documentation](https://cloud.google.com/docs/authentication)
 - [NTP Server Documentation](https://www.ntp.org/documentation.html)
+- [Google Client Invalid JWT: Token must be a short-lived token](https://stackoverflow.com/questions/48056381/google-client-invalid-jwt-token-must-be-a-short-lived-token)
