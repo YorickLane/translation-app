@@ -35,7 +35,7 @@
     <form action="/translate" method="post" enctype="multipart/form-data">
       <input type="file" name="file" /><br /><br />
       <label for="languages">Choose target language:</label>
-      <select name="languages" id="languages" multiple>
+      <select name="languages" id="languages" multiple style="height: 300px">
         {% for lang in languages %}
         <option value="{{ lang.code }}">
           {{ lang.name }} - {{ lang.code }}
