@@ -1,14 +1,58 @@
+# Python
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+*.so
+.coverage
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Google Cloud Credentials
+serviceKey.json
+*.json
+.vscode/serviceKey.json
+
+# Application specific
 uploads/*
 !uploads/.gitkeep
 output/*
 !output/.gitkeep
 
-/serviceKey.json
-venv/
-/venv/
-get-pip.py
-__pycache__/
-*.pyc
-config.py
+# Environment variables
+.env
+.env.local
+.env.production
 
+# Logs
+*.log
+logs/
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+get-pip.py
