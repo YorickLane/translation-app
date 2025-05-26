@@ -102,28 +102,50 @@ def translate_file_route():
             try:
                 print(f"Starting translation for {target_language}...")
 
+                # 计算当前语言的进度范围
+                language_start_progress = (index / total_languages) * 100
+                language_end_progress = ((index + 1) / total_languages) * 100
+
                 # 发送开始翻译的进度
-                start_progress = (index / total_languages) * 100
                 socketio.emit(
                     "progress",
                     {
-                        "progress": start_progress,
-                        "message": f"正在翻译到 {target_language}...",
+                        "progress": language_start_progress,
+                        "message": f"开始翻译到 {target_language}...",
                     },
                     namespace="/test",
                 )
 
-                output_file_name = translate_file(saved_file_path, target_language)
+                # 定义进度回调函数
+                def progress_callback(item_progress, message):
+                    # 计算总体进度：当前语言的起始进度 + 当前语言内的进度
+                    total_progress = language_start_progress + (item_progress / 100) * (
+                        language_end_progress - language_start_progress
+                    )
+                    socketio.emit(
+                        "progress",
+                        {
+                            "progress": total_progress,
+                            "message": f"{target_language}: {message}",
+                        },
+                        namespace="/test",
+                    )
+
+                output_file_name = translate_file(
+                    saved_file_path, target_language, progress_callback
+                )
                 output_files.append(os.path.join(OUTPUT_FOLDER, output_file_name))
                 print(
                     f"Translation to {target_language} completed. Output file: {output_file_name}"
                 )
 
                 # 发送完成进度
-                progress = (index + 1) / total_languages * 100
                 socketio.emit(
                     "progress",
-                    {"progress": progress, "message": f"{target_language} 翻译完成"},
+                    {
+                        "progress": language_end_progress,
+                        "message": f"{target_language} 翻译完成！",
+                    },
                     namespace="/test",
                 )
 

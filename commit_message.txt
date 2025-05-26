@@ -22,3 +22,29 @@ Modified files:
 - translate.py: Removed file size limits, updated error handling
 - config.py: Added translation engine configuration
 - README.md: Updated with new troubleshooting information 
+
+feat: Add detailed real-time translation progress tracking
+
+- Implement item-level progress tracking for translations
+- Add progress callback functionality to all translation functions
+- Display current translating key/value pair with item count (e.g., "pt: 正在翻译: 新邮箱 (1/660)")
+- Calculate accurate progress percentages for multi-language translations
+- Show detailed progress information via Socket.IO:
+  - Overall progress percentage
+  - Current language being translated
+  - Specific key being translated
+  - Items completed vs total items
+- Update README to document enhanced progress features
+
+The translation process now provides granular feedback, especially useful for 
+large files. Users can see exactly which item is being translated and track 
+the progress of each language translation in real-time.
+
+Modified files:
+- translate.py: Added progress_callback parameter to translation functions
+- app.py: Implemented progress callback with detailed status messages
+- README.md: Updated documentation to reflect new progress tracking features
+
+This enhancement significantly improves user experience by providing transparency
+into the translation process, particularly beneficial for large JSON/JS files
+with hundreds of key-value pairs. 

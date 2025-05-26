@@ -146,7 +146,7 @@ def translate_text(text, target_language="en"):
     return translated_text.replace(newline_placeholder, "\n")
 
 
-def translate_json_file(source_file_path, target_language="en"):
+def translate_json_file(source_file_path, target_language="en", progress_callback=None):
     """翻译JSON文件，支持嵌套结构和批量处理"""
     logger.info(f"开始翻译JSON文件到 {target_language}")
 
@@ -178,6 +178,11 @@ def translate_json_file(source_file_path, target_language="en"):
             logger.info(f"翻译进度: {i}/{total_items} - {key}")
             translated_data[key] = translate_value(value)
 
+            # 调用进度回调函数
+            if progress_callback:
+                progress = (i / total_items) * 100
+                progress_callback(progress, f"正在翻译: {key} ({i}/{total_items})")
+
             # 每处理几个项目后稍作休息
             if i % BATCH_SIZE == 0:
                 logger.info(f"已处理 {i} 项，休息片刻...")
@@ -197,7 +202,9 @@ def translate_json_file(source_file_path, target_language="en"):
         raise
 
 
-def translate_locale_file(source_file_path, target_language="en"):
+def translate_locale_file(
+    source_file_path, target_language="en", progress_callback=None
+):
     """翻译JavaScript语言文件"""
     logger.info(f"开始翻译JS文件到 {target_language}")
 
@@ -226,6 +233,11 @@ def translate_locale_file(source_file_path, target_language="en"):
                 translated_key_value_pairs.append((key, translated_value))
             else:
                 translated_key_value_pairs.append((key, cleaned_value))
+
+            # 调用进度回调函数
+            if progress_callback:
+                progress = (i / total_pairs) * 100
+                progress_callback(progress, f"正在翻译: {key} ({i}/{total_pairs})")
 
             # 批量处理间隔
             if i % BATCH_SIZE == 0:
@@ -273,7 +285,7 @@ def create_zip(files, output_filename):
         raise
 
 
-def translate_file(source_file_path, target_language="en"):
+def translate_file(source_file_path, target_language="en", progress_callback=None):
     """根据文件类型调用相应的翻译函数"""
     logger.info(f"开始翻译文件: {source_file_path} -> {target_language}")
 
@@ -281,9 +293,13 @@ def translate_file(source_file_path, target_language="en"):
 
     try:
         if file_extension == "json":
-            return translate_json_file(source_file_path, target_language)
+            return translate_json_file(
+                source_file_path, target_language, progress_callback
+            )
         elif file_extension == "js":
-            return translate_locale_file(source_file_path, target_language)
+            return translate_locale_file(
+                source_file_path, target_language, progress_callback
+            )
         else:
             raise ValueError(f"不支持的文件类型: {file_extension}")
     except Exception as e:
