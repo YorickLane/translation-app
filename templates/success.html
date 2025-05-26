@@ -1,13 +1,298 @@
 <!DOCTYPE html>
-<html>
-<head>
-    <title>Translation Successful</title>
-</head>
-<body>
-    <h1>Translation Successful!</h1>
-    <p>Your translated file is ready.</p>
-    {% for file_path in file_paths %}
-    <a href="{{ file_path }}">Download Translated File for {{ file_path.split('/')[-1].split('.')[0] }}</a><br>
-    {% endfor %} 
-</body>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>翻译完成 - Translation Utility</title>
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .container {
+        max-width: 600px;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+        text-align: center;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        color: white;
+        padding: 40px 30px;
+      }
+
+      .success-icon {
+        font-size: 4em;
+        margin-bottom: 20px;
+        animation: bounce 1s ease-in-out;
+      }
+
+      @keyframes bounce {
+        0%,
+        20%,
+        50%,
+        80%,
+        100% {
+          transform: translateY(0);
+        }
+        40% {
+          transform: translateY(-10px);
+        }
+        60% {
+          transform: translateY(-5px);
+        }
+      }
+
+      .header h1 {
+        font-size: 2.5em;
+        margin-bottom: 10px;
+        font-weight: 300;
+      }
+
+      .header p {
+        opacity: 0.9;
+        font-size: 1.2em;
+      }
+
+      .content {
+        padding: 40px 30px;
+      }
+
+      .download-section {
+        margin-bottom: 30px;
+      }
+
+      .download-section h3 {
+        color: #333;
+        margin-bottom: 20px;
+        font-size: 1.3em;
+      }
+
+      .download-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        color: white;
+        text-decoration: none;
+        padding: 15px 30px;
+        border-radius: 50px;
+        font-size: 1.1em;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        box-shadow: 0 5px 15px rgba(79, 172, 254, 0.3);
+        margin: 10px;
+      }
+
+      .download-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(79, 172, 254, 0.4);
+        text-decoration: none;
+        color: white;
+      }
+
+      .download-btn i {
+        font-size: 1.2em;
+      }
+
+      .info-section {
+        background: #f8f9ff;
+        border-radius: 15px;
+        padding: 25px;
+        margin: 30px 0;
+      }
+
+      .info-section h4 {
+        color: #4facfe;
+        margin-bottom: 15px;
+        font-size: 1.1em;
+      }
+
+      .info-list {
+        text-align: left;
+        color: #666;
+        line-height: 1.6;
+      }
+
+      .info-list li {
+        margin-bottom: 8px;
+        list-style: none;
+        position: relative;
+        padding-left: 25px;
+      }
+
+      .info-list li:before {
+        content: "✓";
+        position: absolute;
+        left: 0;
+        color: #4facfe;
+        font-weight: bold;
+      }
+
+      .actions {
+        margin-top: 30px;
+        display: flex;
+        gap: 15px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+
+      .action-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: white;
+        color: #4facfe;
+        border: 2px solid #4facfe;
+        text-decoration: none;
+        padding: 12px 25px;
+        border-radius: 25px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+      }
+
+      .action-btn:hover {
+        background: #4facfe;
+        color: white;
+        text-decoration: none;
+        transform: translateY(-1px);
+      }
+
+      .stats {
+        display: flex;
+        justify-content: space-around;
+        margin: 20px 0;
+        padding: 20px;
+        background: #f0f8ff;
+        border-radius: 10px;
+      }
+
+      .stat-item {
+        text-align: center;
+      }
+
+      .stat-number {
+        font-size: 2em;
+        font-weight: bold;
+        color: #4facfe;
+      }
+
+      .stat-label {
+        color: #666;
+        font-size: 0.9em;
+        margin-top: 5px;
+      }
+
+      @media (max-width: 768px) {
+        .container {
+          margin: 10px;
+          border-radius: 15px;
+        }
+
+        .content {
+          padding: 20px;
+        }
+
+        .header h1 {
+          font-size: 2em;
+        }
+
+        .actions {
+          flex-direction: column;
+          align-items: center;
+        }
+
+        .stats {
+          flex-direction: column;
+          gap: 15px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <div class="success-icon">
+          <i class="fas fa-check-circle"></i>
+        </div>
+        <h1>翻译完成！</h1>
+        <p>您的文件已成功翻译</p>
+      </div>
+
+      <div class="content">
+        <div class="download-section">
+          <h3><i class="fas fa-download"></i> 下载翻译结果</h3>
+          <a href="{{ zip_path }}" class="download-btn">
+            <i class="fas fa-file-archive"></i>
+            下载 ZIP 压缩包
+          </a>
+        </div>
+
+        <div class="info-section">
+          <h4><i class="fas fa-info-circle"></i> 文件信息</h4>
+          <ul class="info-list">
+            <li>ZIP 文件包含所有目标语言的翻译版本</li>
+            <li>每个语言都有对应的独立文件</li>
+            <li>保持原始文件的格式和结构</li>
+            <li>文件已自动压缩，便于下载和分享</li>
+          </ul>
+        </div>
+
+        <div class="actions">
+          <a href="/" class="action-btn">
+            <i class="fas fa-plus"></i>
+            翻译新文件
+          </a>
+          <a href="#" class="action-btn" onclick="window.location.reload()">
+            <i class="fas fa-redo"></i>
+            刷新页面
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // 自动下载提示
+      setTimeout(() => {
+        const downloadBtn = document.querySelector(".download-btn");
+        downloadBtn.style.animation = "pulse 2s infinite";
+      }, 2000);
+
+      // 添加脉冲动画
+      const style = document.createElement("style");
+      style.textContent = `
+            @keyframes pulse {
+                0% { transform: scale(1); }
+                50% { transform: scale(1.05); }
+                100% { transform: scale(1); }
+            }
+        `;
+      document.head.appendChild(style);
+
+      // 页面加载完成后的提示
+      window.addEventListener("load", () => {
+        console.log("翻译完成页面加载成功");
+      });
+    </script>
+  </body>
 </html>
