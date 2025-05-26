@@ -183,10 +183,11 @@ def translate_json_file(source_file_path, target_language="en", progress_callbac
                 progress = (i / total_items) * 100
                 progress_callback(progress, f"正在翻译: {key} ({i}/{total_items})")
 
-            # 每处理几个项目后稍作休息
-            if i % BATCH_SIZE == 0:
-                logger.info(f"已处理 {i} 项，休息片刻...")
-                time.sleep(1)
+            # 每处理几个项目后稍作休息（可选）
+            # 注释掉休息功能，如果需要可以取消注释
+            # if i % BATCH_SIZE == 0:
+            #     logger.info(f"已处理 {i} 项，休息片刻...")
+            #     time.sleep(1)
 
         output_file_name = f"{target_language}.json"
         output_path = os.path.join("output", output_file_name)
@@ -239,10 +240,11 @@ def translate_locale_file(
                 progress = (i / total_pairs) * 100
                 progress_callback(progress, f"正在翻译: {key} ({i}/{total_pairs})")
 
-            # 批量处理间隔
-            if i % BATCH_SIZE == 0:
-                logger.info(f"已处理 {i} 项，休息片刻...")
-                time.sleep(1)
+            # 批量处理间隔（可选）
+            # 注释掉休息功能，如果需要可以取消注释
+            # if i % BATCH_SIZE == 0:
+            #     logger.info(f"已处理 {i} 项，休息片刻...")
+            #     time.sleep(1)
 
         except Exception as e:
             logger.error(f"翻译键值对失败 {key}: {value}. 错误: {e}")

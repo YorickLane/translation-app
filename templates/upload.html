@@ -476,6 +476,14 @@
             }
 
             progressText.innerText = displayText;
+
+            // 检查是否完成
+            if (data.complete && data.redirect_url) {
+                // 延迟一下让用户看到100%完成
+                setTimeout(() => {
+                    window.location.href = data.redirect_url;
+                }, 500);
+            }
         });
 
       // 文件上传处理
@@ -681,22 +689,56 @@
               return;
           }
 
-          // 添加选中的语言到表单
-          const form = e.target;
+          // 准备表单数据
+          const formData = new FormData();
+          formData.append('file', fileInput.files[0]);
+
+          // 添加选中的语言
           selectedLanguages.forEach(code => {
-              const input = document.createElement('input');
-              input.type = 'hidden';
-              input.name = 'languages';
-              input.value = code;
-              form.appendChild(input);
+              formData.append('languages', code);
           });
 
-          // 提交表单
-          form.submit();
+          // 禁用提交按钮
+          const submitBtn = document.getElementById('submitBtn');
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 翻译中...';
+
+          // 使用AJAX提交
+          fetch('/translate', {
+              method: 'POST',
+              body: formData
+          })
+          .then(response => {
+              if (!response.ok) {
+                  throw new Error('翻译请求失败');
+              }
+              // 响应处理由Socket.IO的progress事件处理
+          })
+          .catch(error => {
+              console.error('Error:', error);
+              alert('翻译过程中出现错误，请重试');
+              submitBtn.disabled = false;
+              submitBtn.innerHTML = '<i class="fas fa-magic"></i> 开始翻译';
+          });
       });
 
       // 初始化
       updateSubmitButton();
+
+      // 页面加载时重置进度条
+      window.addEventListener('load', () => {
+          const progressSection = document.getElementById('progressSection');
+          const progressFill = document.getElementById('progressFill');
+          const progressText = document.getElementById('progressText');
+
+          // 确保进度条隐藏
+          progressSection.style.display = 'none';
+          progressFill.style.width = '0%';
+          progressText.innerText = '0%';
+
+          // 重置进度条颜色
+          progressFill.style.background = 'linear-gradient(90deg, #4facfe, #00f2fe)';
+      });
     </script>
   </body>
 </html>

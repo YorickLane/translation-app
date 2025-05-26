@@ -48,3 +48,42 @@ Modified files:
 This enhancement significantly improves user experience by providing transparency
 into the translation process, particularly beneficial for large JSON/JS files
 with hundreds of key-value pairs. 
+
+fix: Resolve translation completion freeze and optimize performance
+
+## Bug Fixes
+- Fix BrokenPipeError causing page freeze after translation completion
+- Resolve Socket.IO connection issues with form submission
+- Fix progress bar not resetting immediately on page reload
+
+## Performance Improvements  
+- Remove unnecessary 1-second delays in batch processing
+- Save ~66 seconds for 660-item translations
+- Optimize request flow with AJAX submission
+
+## User Experience Enhancements
+- Convert form submission to AJAX for smoother experience
+- Add "Translating..." state with spinner icon on submit button
+- Auto-redirect to success page after completion
+- Remove redundant "Refresh Page" button from success page
+- Ensure progress bar resets properly on page load
+
+## Technical Changes
+- Replace traditional form POST with Fetch API
+- Add `/success` route for GET requests
+- Send completion signal with redirect URL via Socket.IO
+- Improve error handling for network failures
+- Add file existence check before deletion
+
+This update significantly improves the translation workflow by eliminating
+the completion freeze issue and reducing translation time by removing
+unnecessary delays. The AJAX-based submission provides a more modern and
+reliable user experience.
+
+Modified files:
+- app.py: Add success route, implement AJAX handling, fix completion flow
+- templates/upload.html: Convert to AJAX submission, handle completion signal
+- templates/success.html: Remove refresh button
+- translate.py: Comment out batch processing delays
+- README.md: Update documentation with new features
+- CHANGELOG.md: Add version 1.3.0 release notes 

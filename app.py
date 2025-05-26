@@ -64,6 +64,15 @@ def uploaded_file(filename):
     return send_from_directory(OUTPUT_FOLDER, filename)
 
 
+@app.route("/success")
+def success_page():
+    zip_path = request.args.get("zip_path", "")
+    if not zip_path:
+        flash("未找到翻译结果文件")
+        return redirect("/")
+    return render_template("success.html", zip_path=zip_path)
+
+
 @app.route("/translate", methods=["POST"])
 def translate_file_route():
     try:
@@ -186,9 +195,25 @@ def translate_file_route():
 
         # Remove individual files after adding to ZIP
         for output_file in output_files:
-            os.remove(output_file)
+            if os.path.exists(output_file):
+                os.remove(output_file)
 
-        return render_template("success.html", zip_path="/output/" + zip_name)
+        # 发送完成信号
+        socketio.emit(
+            "progress",
+            {
+                "progress": 100,
+                "message": "翻译全部完成！",
+                "complete": True,
+                "redirect_url": f"/success?zip_path=/output/{zip_name}",
+            },
+            namespace="/test",
+        )
+
+        # 给客户端一点时间处理完成信号
+        eventlet.sleep(0.5)
+
+        return "", 200  # 返回空响应，让客户端处理跳转
 
     except Exception as e:
         print(f"An error occurred during file translation: {e}")
