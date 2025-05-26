@@ -97,18 +97,64 @@ def translate_file_route():
 
         output_files = []
         total_languages = len(target_languages)
-        for index, target_language in enumerate(target_languages):
-            print(f"Starting translation for {target_language}...")
-            output_file_name = translate_file(saved_file_path, target_language)
-            output_files.append(os.path.join(OUTPUT_FOLDER, output_file_name))
-            print(
-                f"Translation to {target_language} completed. Output file: {output_file_name}"
-            )
 
-            # Emitting progress
-            progress = (index + 1) / total_languages * 100
-            socketio.emit("progress", {"progress": progress}, namespace="/test")
-            sleep(1)  # Simulating some delay for demonstration purposes
+        for index, target_language in enumerate(target_languages):
+            try:
+                print(f"Starting translation for {target_language}...")
+
+                # 发送开始翻译的进度
+                start_progress = (index / total_languages) * 100
+                socketio.emit(
+                    "progress",
+                    {
+                        "progress": start_progress,
+                        "message": f"正在翻译到 {target_language}...",
+                    },
+                    namespace="/test",
+                )
+
+                output_file_name = translate_file(saved_file_path, target_language)
+                output_files.append(os.path.join(OUTPUT_FOLDER, output_file_name))
+                print(
+                    f"Translation to {target_language} completed. Output file: {output_file_name}"
+                )
+
+                # 发送完成进度
+                progress = (index + 1) / total_languages * 100
+                socketio.emit(
+                    "progress",
+                    {"progress": progress, "message": f"{target_language} 翻译完成"},
+                    namespace="/test",
+                )
+
+            except Exception as e:
+                error_msg = str(e)
+                print(f"Translation failed for {target_language}: {error_msg}")
+
+                # 发送错误信息
+                socketio.emit(
+                    "progress",
+                    {
+                        "progress": (index + 1) / total_languages * 100,
+                        "error": f"{target_language} 翻译失败: {error_msg}",
+                    },
+                    namespace="/test",
+                )
+
+                # 如果是速率限制错误，建议用户稍后重试
+                if "速率限制" in error_msg or "Rate Limit" in error_msg:
+                    flash(
+                        f"翻译失败：API速率限制。请等待几分钟后重试，或考虑减少同时翻译的语言数量。"
+                    )
+                    return redirect("/")
+                elif "配额" in error_msg or "quota" in error_msg:
+                    flash(
+                        f"翻译失败：API配额已用完。请检查Google Cloud配额设置或稍后重试。"
+                    )
+                    return redirect("/")
+                else:
+                    flash(f"翻译到 {target_language} 时发生错误: {error_msg}")
+                    return redirect("/")
 
         # Create a ZIP archive from translated files
         zip_name = f"translations_{filename}.zip"

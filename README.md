@@ -152,13 +152,21 @@ translation-app/
 ├── translate.py           # 翻译逻辑实现
 ├── config.py             # 配置文件
 ├── test_credentials.py   # 凭证测试脚本
-├── example.json           # 示例JSON文件用于测试
+├── check_api_status.py   # API状态检查工具
+├── translate_claude.py   # Claude API翻译模块
+├── split_json.py         # JSON文件分割工具
+├── example.json          # 示例JSON文件用于测试
+├── test-small.json       # 小型测试文件
 ├── requirements.txt      # Python依赖包列表
 ├── serviceKey.json       # Google Cloud凭证文件（需要自行创建）
 ├── setup.sh              # 一键安装脚本（macOS/Linux）
 ├── setup.bat             # 一键安装脚本（Windows）
 ├── start.sh              # 应用启动脚本（macOS/Linux）
 ├── start.bat             # 应用启动脚本（Windows）
+├── API_USAGE_TIPS.md     # API使用建议文档
+├── BILLING_TROUBLESHOOTING.md # 计费问题排查指南
+├── CLAUDE_API_SETUP.md   # Claude API设置指南
+├── CREATE_NEW_PROJECT.md # 创建新项目指南
 ├── templates/            # HTML模板文件
 │   ├── upload.html       # 主上传页面（现代化UI）
 │   └── success.html      # 翻译完成页面
@@ -180,6 +188,7 @@ translation-app/
 3. **API错误**：确认Google Cloud项目已启用Translation API
 4. **界面显示异常**：确保浏览器支持现代CSS特性，建议使用Chrome/Firefox/Safari
 5. **文件上传失败**：检查文件格式是否为.js或.json，文件大小是否合理
+6. **"User Rate Limit Exceeded"错误**：通常是计费账号问题，请查看 `BILLING_TROUBLESHOOTING.md`
 
 ### 故障排除
 如果遇到问题，请按以下步骤检查：
@@ -188,6 +197,13 @@ translation-app/
 3. 确认所有依赖包已安装
 4. 确认 `serviceKey.json` 文件存在
 5. 确认Google Cloud项目配置正确
+6. 检查Google Cloud计费账号状态是否正常
+
+### 🆘 更多帮助
+- **API使用建议**：查看 `API_USAGE_TIPS.md`
+- **计费问题排查**：查看 `BILLING_TROUBLESHOOTING.md`
+- **使用Claude API**：查看 `CLAUDE_API_SETUP.md`
+- **创建新项目**：查看 `CREATE_NEW_PROJECT.md`
 
 ## 🔧 开发相关
 

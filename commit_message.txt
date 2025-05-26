@@ -1,0 +1,24 @@
+fix: Remove file size limit and update billing error handling
+
+- Remove 500-item limit check for JSON files as rate limit was caused by billing issues
+- Restore normal API request parameters (batch size: 10, delay: 0.1s)
+- Update error messages to indicate billing account check
+- Add comprehensive billing troubleshooting guide (BILLING_TROUBLESHOOTING.md)
+- Update README with billing problem references and new documentation links
+- Add alternative translation engine support (Claude API)
+
+The "User Rate Limit Exceeded" error was caused by Google Cloud billing account 
+issues, not actual rate limits. This commit removes unnecessary restrictions and 
+provides better guidance for resolving billing-related problems.
+
+New files:
+- BILLING_TROUBLESHOOTING.md: Guide for resolving Google Cloud billing issues
+- CLAUDE_API_SETUP.md: Instructions for using Claude API as alternative
+- CREATE_NEW_PROJECT.md: Guide for creating new Google Cloud project
+- translate_claude.py: Claude API translation implementation
+- check_api_status.py: Tool to monitor API recovery status
+
+Modified files:
+- translate.py: Removed file size limits, updated error handling
+- config.py: Added translation engine configuration
+- README.md: Updated with new troubleshooting information 

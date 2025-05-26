@@ -457,15 +457,26 @@
           console.log("Connected to server");
       });
 
-      socket.on("progress", function (data) {
-          const progressFill = document.getElementById("progressFill");
-          const progressText = document.getElementById("progressText");
-          const progressSection = document.getElementById("progressSection");
+              socket.on("progress", function (data) {
+            const progressFill = document.getElementById("progressFill");
+            const progressText = document.getElementById("progressText");
+            const progressSection = document.getElementById("progressSection");
 
-          progressSection.style.display = "block";
-          progressFill.style.width = data.progress + "%";
-          progressText.innerText = Math.round(data.progress) + "%";
-      });
+            progressSection.style.display = "block";
+            progressFill.style.width = data.progress + "%";
+
+            // 显示进度百分比和消息
+            let displayText = Math.round(data.progress) + "%";
+            if (data.message) {
+                displayText += " - " + data.message;
+            }
+            if (data.error) {
+                displayText = "❌ " + data.error;
+                progressFill.style.background = "linear-gradient(90deg, #ff6b6b, #ee5a52)";
+            }
+
+            progressText.innerText = displayText;
+        });
 
       // 文件上传处理
       const fileUpload = document.querySelector('.file-upload');
