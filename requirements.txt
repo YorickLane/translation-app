@@ -5,6 +5,12 @@ Flask-SocketIO>=5.5.0
 # Google Cloud Translation API
 google-cloud-translate>=3.20.0
 
+# Claude API
+anthropic>=0.39.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
 # Async support
 eventlet>=0.40.0
 

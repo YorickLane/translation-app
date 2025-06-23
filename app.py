@@ -4,7 +4,9 @@ import eventlet
 eventlet.monkey_patch(socket=True)
 
 from translate import translate_text, translate_file, create_zip
-from flask import Flask, request, render_template, send_from_directory, flash, redirect
+from translate_claude import translate_json_file_claude
+from claude_models import get_claude_models
+from flask import Flask, request, render_template, send_from_directory, flash, redirect, jsonify
 import logging
 from werkzeug.utils import secure_filename
 import os
@@ -13,7 +15,8 @@ from google.cloud import translate_v2 as translate
 import datetime
 from flask_socketio import SocketIO, emit
 from time import sleep
-from config import SECRET_KEY
+from config import SECRET_KEY, TRANSLATION_ENGINE
+import config
 from google.auth.exceptions import RefreshError
 
 app = Flask(__name__)
@@ -73,6 +76,17 @@ def success_page():
     return render_template("success.html", zip_path=zip_path)
 
 
+@app.route("/api/claude-models")
+def get_claude_models_api():
+    """API 端点：获取可用的 Claude 模型列表"""
+    try:
+        models = get_claude_models()
+        return jsonify({"success": True, "models": models})
+    except Exception as e:
+        logging.error(f"获取模型列表失败: {e}")
+        return jsonify({"success": False, "error": str(e), "models": []})
+
+
 @app.route("/translate", methods=["POST"])
 def translate_file_route():
     try:
@@ -103,6 +117,12 @@ def translate_file_route():
         if not target_languages:
             flash("No target languages selected")
             return redirect("/")
+
+        # Get translation engine from form or use default
+        translation_engine = request.form.get("translation_engine", TRANSLATION_ENGINE)
+        
+        # Get Claude model if using Claude
+        claude_model = request.form.get("claude_model", config.CLAUDE_MODEL)
 
         output_files = []
         total_languages = len(target_languages)
@@ -140,9 +160,16 @@ def translate_file_route():
                         namespace="/test",
                     )
 
-                output_file_name = translate_file(
-                    saved_file_path, target_language, progress_callback
-                )
+                if translation_engine == "claude":
+                    # Use Claude API for translation with selected model
+                    output_file_name = translate_json_file_claude(
+                        saved_file_path, target_language, progress_callback, claude_model
+                    )
+                else:
+                    # Use Google Translate API
+                    output_file_name = translate_file(
+                        saved_file_path, target_language, progress_callback
+                    )
                 output_files.append(os.path.join(OUTPUT_FOLDER, output_file_name))
                 print(
                     f"Translation to {target_language} completed. Output file: {output_file_name}"
@@ -232,4 +259,12 @@ def test_disconnect():
 
 
 if __name__ == "__main__":
+    # 显示当前配置
+    print("=" * 50)
+    print("🚀 翻译应用启动中...")
+    print(f"📊 默认翻译引擎: {TRANSLATION_ENGINE}")
+    if TRANSLATION_ENGINE == "claude" or config.CLAUDE_API_KEY:
+        print(f"🤖 Claude 模型: {config.CLAUDE_MODEL}")
+    print("=" * 50)
+    
     socketio.run(app, debug=True, host="127.0.0.1")

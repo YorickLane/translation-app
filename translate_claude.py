@@ -9,15 +9,11 @@ import json
 import time
 import logging
 from anthropic import Anthropic
+from config import CLAUDE_API_KEY, CLAUDE_MODEL, BATCH_SIZE, REQUEST_DELAY
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Claude API配置
-CLAUDE_API_KEY = os.environ.get("CLAUDE_API_KEY", "")
-BATCH_SIZE = 10  # 每批翻译的项目数
-REQUEST_DELAY = 0.5  # 请求间隔
 
 # 语言映射
 LANGUAGE_NAMES = {
@@ -44,12 +40,15 @@ LANGUAGE_NAMES = {
 }
 
 
-def translate_with_claude(texts, target_language="en"):
+def translate_with_claude(texts, target_language="en", model=None):
     """使用Claude API翻译文本"""
     if not CLAUDE_API_KEY:
         raise ValueError("请设置CLAUDE_API_KEY环境变量")
 
     client = Anthropic(api_key=CLAUDE_API_KEY)
+    
+    # 使用传入的模型或默认模型
+    selected_model = model or CLAUDE_MODEL
 
     # 准备翻译提示
     target_lang_name = LANGUAGE_NAMES.get(target_language, target_language)
@@ -69,7 +68,7 @@ Output the translated JSON only, without any explanation."""
     try:
         # 调用Claude API
         response = client.messages.create(
-            model="claude-3-haiku-20240307",  # 使用更便宜的Haiku模型
+            model=selected_model,  # 使用选定的模型
             max_tokens=4096,
             temperature=0.3,  # 降低温度以获得更一致的翻译
             messages=[{"role": "user", "content": prompt}],
@@ -97,9 +96,11 @@ Output the translated JSON only, without any explanation."""
         raise
 
 
-def translate_json_file_claude(source_file_path, target_language="en"):
+def translate_json_file_claude(source_file_path, target_language="en", progress_callback=None, model=None):
     """使用Claude翻译JSON文件"""
-    logger.info(f"开始使用Claude翻译JSON文件到 {target_language}")
+    # 使用传入的模型或默认模型
+    selected_model = model or CLAUDE_MODEL
+    logger.info(f"开始使用Claude翻译JSON文件到 {target_language}，使用模型: {selected_model}")
 
     with open(source_file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -117,10 +118,15 @@ def translate_json_file_claude(source_file_path, target_language="en"):
         total_batches = (total_items + BATCH_SIZE - 1) // BATCH_SIZE
 
         logger.info(f"翻译批次 {batch_num}/{total_batches}")
+        
+        # 发送进度更新
+        if progress_callback:
+            progress = (i / total_items) * 100
+            progress_callback(progress, f"翻译批次 {batch_num}/{total_batches}")
 
         try:
-            # 翻译这一批
-            translated_batch = translate_with_claude(batch_items, target_language)
+            # 翻译这一批，传递选定的模型
+            translated_batch = translate_with_claude(batch_items, target_language, selected_model)
             translated_data.update(translated_batch)
 
             # 请求间隔
@@ -146,6 +152,9 @@ def translate_json_file_claude(source_file_path, target_language="en"):
 def test_claude_api():
     """测试Claude API是否正常工作"""
     try:
+        # 显示当前使用的模型
+        print(f"📊 当前使用的 Claude 模型: {CLAUDE_MODEL}")
+        
         test_data = {"hello": "Hello", "world": "World"}
         result = translate_with_claude(test_data, "zh")
         print("✅ Claude API测试成功！")
