@@ -58,8 +58,15 @@ This is a Flask-based web application for translating JavaScript and JSON files 
 3. **translate_claude.py**: Alternative translation using Claude API
    - Similar functionality to Google Translate module
    - Configurable via TRANSLATION_ENGINE in config.py
+   - Enhanced logging for model selection verification
 
-4. **Frontend Architecture**:
+4. **claude_token_counter.py**: Token calculation and cost estimation
+   - Estimates token usage for translation tasks
+   - Supports all Claude models with 2025 pricing
+   - Provides cost estimation in USD and CNY
+   - Accessible via `/api/estimate-cost` endpoint
+
+5. **Frontend Architecture**:
    - Modern Material Design-inspired UI
    - Real-time progress tracking with Socket.IO client
    - Drag-and-drop file upload
@@ -81,6 +88,7 @@ This is a Flask-based web application for translating JavaScript and JSON files 
 4. **Batch Download**: ZIP file containing all translated versions
 5. **Error Handling**: Retry mechanism for API failures, comprehensive error messages
 6. **Language Support**: 193 languages with smart search functionality
+7. **Cost Estimation**: Real-time token calculation and cost preview for Claude API
 
 ### Configuration
 

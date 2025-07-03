@@ -1,7 +1,7 @@
 # 翻译工具 (Translation Utility)
 
 ## 概述
-这是一个基于Flask的翻译应用，专门用于自动翻译JavaScript和JSON文件中的语言字符串。它使用Google Cloud Translation API进行翻译，支持带引号和不带引号的JavaScript对象键名。
+这是一个基于Flask的翻译应用，专门用于自动翻译JavaScript和JSON文件中的语言字符串。支持 Google Cloud Translation API 和 Claude API 双引擎，提供实时费用预估功能。
 
 ## 功能特性
 - 🎯 **智能文件上传**：支持拖拽和点击上传，实时文件验证
@@ -13,11 +13,13 @@
 - 🚀 **异步处理**：AJAX提交，避免页面卡顿，流畅的用户体验
 - 📦 **批量输出**：一键下载包含所有语言的ZIP文件
 - 🎨 **现代化UI**：Material Design风格，优雅的动画效果
+- 💰 **费用预估**：Claude API 实时 token 计算和费用预估（支持美元/人民币）
+- 🤖 **多引擎支持**：Google Translate API 和 Claude API（支持多个模型）
 - 🚀 **用户体验**：智能表单验证，一键操作
 
 ## 系统要求
 - Python 3.8+ (推荐 Python 3.10+)
-- Google Cloud Translation API 凭证
+- Google Cloud Translation API 凭证 或 Claude API Key
 - 稳定的网络连接
 
 ## 🚀 快速开始
