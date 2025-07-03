@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 setup.bat
 
 # Manual setup
-python3 -m venv venv
+python -m venv venv
 source venv/bin/activate  # macOS/Linux
 pip install -r requirements.txt
 ```

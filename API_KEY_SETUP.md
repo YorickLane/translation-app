@@ -104,7 +104,7 @@ source ~/.zshrc
 echo $CLAUDE_API_KEY
 
 # 测试 API
-python3 check_claude_model.py
+python check_claude_model.py
 ```
 
 3. **在代码中使用：**

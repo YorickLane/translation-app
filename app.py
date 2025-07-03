@@ -1,11 +1,9 @@
 # app.py
-import eventlet
-
-eventlet.monkey_patch(socket=True)
 
 from translate import translate_text, translate_file, create_zip
 from translate_claude import translate_json_file_claude
 from claude_models import get_claude_models
+from claude_token_counter import count_tokens_for_translation, format_cost_summary
 from flask import Flask, request, render_template, send_from_directory, flash, redirect, jsonify
 import logging
 from werkzeug.utils import secure_filename
@@ -22,7 +20,7 @@ from google.auth.exceptions import RefreshError
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 logging.basicConfig(level=logging.DEBUG)
-socketio = SocketIO(app)
+socketio = SocketIO(app, async_mode='threading')
 
 # Configuration
 UPLOAD_FOLDER = "uploads"
@@ -248,6 +246,63 @@ def translate_file_route():
         return redirect("/")
 
 
+@app.route("/api/estimate-cost", methods=["POST"])
+def estimate_cost():
+    """估算翻译成本"""
+    try:
+        # 检查文件
+        if "file" not in request.files:
+            return jsonify({"error": "未上传文件"}), 400
+        
+        file = request.files["file"]
+        if not file or not allowed_file(file.filename):
+            return jsonify({"error": "无效的文件类型"}), 400
+        
+        # 获取参数
+        target_languages = request.form.getlist("languages")
+        translation_engine = request.form.get("translation_engine", "google")
+        claude_model = request.form.get("claude_model", config.CLAUDE_MODEL)
+        
+        if not target_languages:
+            return jsonify({"error": "未选择目标语言"}), 400
+        
+        # 如果不是 Claude，返回免费信息
+        if translation_engine != "claude":
+            return jsonify({
+                "engine": "google",
+                "message": "Google Translate API 费用取决于您的 Google Cloud 账户设置",
+                "estimated_cost": "请查看 Google Cloud Console 了解定价"
+            })
+        
+        # 保存临时文件
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp_file:
+            file.save(tmp_file.name)
+            
+            # 计算 token 和费用
+            token_info = count_tokens_for_translation(
+                tmp_file.name, 
+                target_languages, 
+                claude_model
+            )
+            
+            # 删除临时文件
+            os.unlink(tmp_file.name)
+        
+        # 返回预估信息
+        return jsonify({
+            "success": True,
+            "engine": "claude",
+            "model": token_info.get("model_name", "Unknown"),
+            "estimation": token_info,
+            "formatted_summary": format_cost_summary(token_info)
+        })
+        
+    except Exception as e:
+        logger.error(f"费用预估失败: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @socketio.on("connect", namespace="/test")
 def test_connect():
     print("Client connected")
@@ -267,4 +322,4 @@ if __name__ == "__main__":
         print(f"🤖 Claude 模型: {config.CLAUDE_MODEL}")
     print("=" * 50)
     
-    socketio.run(app, debug=True, host="127.0.0.1")
+    app.run(debug=True, host="127.0.0.1", port=5000)

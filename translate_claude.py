@@ -67,12 +67,14 @@ Output the translated JSON only, without any explanation."""
 
     try:
         # 调用Claude API
+        logger.info(f"[Claude API] 发送请求到模型: {selected_model}")
         response = client.messages.create(
             model=selected_model,  # 使用选定的模型
             max_tokens=4096,
             temperature=0.3,  # 降低温度以获得更一致的翻译
             messages=[{"role": "user", "content": prompt}],
         )
+        logger.info(f"[Claude API] 成功收到响应，模型: {selected_model}")
 
         # 解析响应
         translated_json = response.content[0].text.strip()
@@ -101,6 +103,7 @@ def translate_json_file_claude(source_file_path, target_language="en", progress_
     # 使用传入的模型或默认模型
     selected_model = model or CLAUDE_MODEL
     logger.info(f"开始使用Claude翻译JSON文件到 {target_language}，使用模型: {selected_model}")
+    print(f"[Claude API] 正在使用模型: {selected_model}")
 
     with open(source_file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -146,6 +149,12 @@ def translate_json_file_claude(source_file_path, target_language="en", progress_
         json.dump(translated_data, f, ensure_ascii=False, indent=2)
 
     logger.info(f"翻译完成: {output_file_name}")
+    print(f"[Claude API] 翻译完成，使用的模型: {selected_model}")
+    
+    # 发送完成消息，包含使用的模型信息
+    if progress_callback:
+        progress_callback(100, f"翻译完成 (模型: {selected_model})")
+    
     return output_file_name
 
 

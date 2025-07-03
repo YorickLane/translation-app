@@ -234,6 +234,58 @@
       .submit-section {
         margin-top: 40px;
         text-align: center;
+        display: flex;
+        gap: 15px;
+        justify-content: center;
+      }
+      
+      .cost-estimation {
+        margin: 30px 0;
+        padding: 20px;
+        background: #f0f8ff;
+        border-radius: 12px;
+        border: 1px solid #b8daff;
+      }
+      
+      .cost-estimation h3 {
+        color: #004085;
+        margin-bottom: 15px;
+        font-size: 1.2em;
+      }
+      
+      .estimation-content {
+        font-family: monospace;
+        white-space: pre-wrap;
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        border: 1px solid #ddd;
+        max-height: 400px;
+        overflow-y: auto;
+      }
+      
+      .estimate-btn {
+        background: #17a2b8;
+        color: white;
+        border: none;
+        padding: 12px 30px;
+        border-radius: 50px;
+        font-size: 1.1em;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 20px rgba(23, 162, 184, 0.3);
+      }
+      
+      .estimate-btn:hover {
+        background: #138496;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 30px rgba(23, 162, 184, 0.4);
+      }
+      
+      .estimate-btn:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+        box-shadow: none;
       }
 
       .engine-section {
@@ -539,8 +591,21 @@
             </div>
           </div>
 
+          <!-- 费用预估 -->
+          <div class="cost-estimation" id="costEstimation" style="display: none;">
+            <h3><i class="fas fa-calculator"></i> 费用预估</h3>
+            <div class="estimation-content" id="estimationContent">
+              <div class="loading-spinner">
+                <i class="fas fa-spinner fa-spin"></i> 计算中...
+              </div>
+            </div>
+          </div>
+
           <!-- 提交按钮 -->
           <div class="submit-section">
+            <button type="button" class="estimate-btn" id="estimateBtn" onclick="estimateCost()" style="display: none;">
+              <i class="fas fa-calculator"></i> 预估费用
+            </button>
             <button type="submit" class="submit-btn" id="submitBtn" disabled>
               <i class="fas fa-magic"></i> 开始翻译
             </button>
@@ -793,10 +858,20 @@
 
       function updateSubmitButton() {
           const submitBtn = document.getElementById('submitBtn');
+          const estimateBtn = document.getElementById('estimateBtn');
           const hasFile = fileInput.files.length > 0;
           const hasLanguages = selectedLanguages.size > 0;
 
           submitBtn.disabled = !(hasFile && hasLanguages);
+          
+          // 显示/隐藏费用预估按钮
+          const selectedEngine = document.querySelector('input[name="translation_engine"]:checked')?.value;
+          if (hasFile && hasLanguages && selectedEngine === 'claude') {
+              estimateBtn.style.display = 'inline-block';
+          } else {
+              estimateBtn.style.display = 'none';
+              document.getElementById('costEstimation').style.display = 'none';
+          }
       }
 
       // 表单提交处理
@@ -816,6 +891,16 @@
           selectedLanguages.forEach(code => {
               formData.append('languages', code);
           });
+
+          // 添加翻译引擎选择
+          const selectedEngine = document.querySelector('input[name="translation_engine"]:checked').value;
+          formData.append('translation_engine', selectedEngine);
+          
+          // 如果选择了 Claude，添加模型选择
+          if (selectedEngine === 'claude') {
+              const claudeModel = document.getElementById('claudeModel').value;
+              formData.append('claude_model', claudeModel);
+          }
 
           // 禁用提交按钮
           const submitBtn = document.getElementById('submitBtn');
@@ -860,6 +945,62 @@
               modelSelector.classList.add('visible');
           } else {
               modelSelector.classList.remove('visible');
+          }
+          
+          // 更新按钮状态
+          updateSubmitButton();
+      }
+      
+      // 费用预估函数
+      async function estimateCost() {
+          const estimateBtn = document.getElementById('estimateBtn');
+          const costEstimation = document.getElementById('costEstimation');
+          const estimationContent = document.getElementById('estimationContent');
+          
+          // 检查文件和语言
+          if (!fileInput.files[0] || selectedLanguages.size === 0) {
+              alert('请先选择文件和目标语言');
+              return;
+          }
+          
+          // 准备表单数据
+          const formData = new FormData();
+          formData.append('file', fileInput.files[0]);
+          
+          // 添加选中的语言
+          selectedLanguages.forEach(code => {
+              formData.append('languages', code);
+          });
+          
+          // 添加翻译引擎和模型
+          formData.append('translation_engine', 'claude');
+          const claudeModel = document.getElementById('claudeModel').value;
+          formData.append('claude_model', claudeModel);
+          
+          // 显示加载状态
+          costEstimation.style.display = 'block';
+          estimationContent.innerHTML = '<div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i> 计算中...</div>';
+          estimateBtn.disabled = true;
+          
+          try {
+              const response = await fetch('/api/estimate-cost', {
+                  method: 'POST',
+                  body: formData
+              });
+              
+              const data = await response.json();
+              
+              if (data.success) {
+                  // 显示格式化的预估信息
+                  estimationContent.innerHTML = data.formatted_summary || '无法获取预估信息';
+              } else {
+                  estimationContent.innerHTML = `❌ 错误: ${data.error || '预估失败'}`;
+              }
+          } catch (error) {
+              console.error('预估失败:', error);
+              estimationContent.innerHTML = '❌ 预估失败，请重试';
+          } finally {
+              estimateBtn.disabled = false;
           }
       }
 

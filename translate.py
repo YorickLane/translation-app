@@ -5,6 +5,7 @@ import zipfile
 import re
 import time
 import logging
+import html
 from google.cloud import translate_v2 as translate
 from google.auth.exceptions import RefreshError
 from google.api_core.exceptions import (
@@ -38,7 +39,8 @@ def safe_translate_text(text, target_language="en", retries=0):
         time.sleep(REQUEST_DELAY)
 
         result = translate_client.translate(text, target_language=target_language)
-        return result["translatedText"]
+        # 解码 HTML 实体，修复如 &#39; 等编码问题
+        return html.unescape(result["translatedText"])
 
     except TooManyRequests as e:
         logger.warning(f"Rate limit exceeded, attempt {retries + 1}/{MAX_RETRIES}")
