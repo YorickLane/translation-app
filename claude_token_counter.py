@@ -105,15 +105,53 @@ def count_tokens_for_translation(file_path, target_languages, model="claude-3-5-
         avg_tokens_per_batch = json_tokens_per_batch // num_batches
         input_tokens_per_batch = avg_tokens_per_batch + prompt_template_tokens
         
-        # 5. 输出 tokens 估算
-        # 翻译后的文本通常比原文长 1.5-2 倍（取决于语言）
-        output_multiplier = 1.8  # 更保守的估计
-        output_tokens_per_batch = int(avg_tokens_per_batch * output_multiplier)
+        # 5. 输出 tokens 估算（根据目标语言调整）
+        # 中文到不同语言的典型长度变化
+        output_multipliers = {
+            'en': 0.5,      # 英文通常比中文短
+            'ja': 0.7,      # 日文略短
+            'ko': 0.8,      # 韩文略短
+            'es': 0.9,      # 西班牙语接近
+            'fr': 0.9,      # 法语接近
+            'de': 1.0,      # 德语略长
+            'ru': 0.9,      # 俄语接近
+            'ar': 0.8,      # 阿拉伯语略短
+            'pt': 0.9,      # 葡萄牙语接近
+            'it': 0.9,      # 意大利语接近
+            'vi': 1.1,      # 越南语略长
+            'th': 0.7,      # 泰语略短
+            'tr': 0.9,      # 土耳其语接近
+            'pl': 0.95,     # 波兰语略长
+            'nl': 0.9,      # 荷兰语接近
+            'sv': 0.85,     # 瑞典语略短
+            'no': 0.85,     # 挪威语略短
+            'da': 0.85,     # 丹麦语略短
+            'fi': 0.9,      # 芬兰语接近
+            'el': 0.9,      # 希腊语接近
+            'he': 0.7,      # 希伯来语较短
+            'hi': 0.8,      # 印地语略短
+            'id': 0.9,      # 印尼语接近
+            'ms': 0.9,      # 马来语接近
+        }
+        
+        # 计算语言数量
+        num_languages = len(target_languages)
+        
+        # 计算每种语言的输出 tokens
+        output_tokens_per_language = []
+        for lang in target_languages:
+            # 使用语言代码的前两个字符匹配
+            lang_code = lang[:2].lower()
+            multiplier = output_multipliers.get(lang_code, 0.85)  # 默认 0.85
+            lang_output_tokens = int(avg_tokens_per_batch * multiplier * num_batches)
+            output_tokens_per_language.append(lang_output_tokens)
+        
+        # 总输出 tokens
+        output_tokens_per_batch = sum(output_tokens_per_language) // (num_batches * num_languages) if num_languages > 0 else int(avg_tokens_per_batch * 0.85)
         
         # 6. 计算所有语言的总 tokens
-        num_languages = len(target_languages)
         total_input_tokens = input_tokens_per_batch * num_batches * num_languages
-        total_output_tokens = output_tokens_per_batch * num_batches * num_languages
+        total_output_tokens = sum(output_tokens_per_language) if output_tokens_per_language else 0
         
         # 获取定价信息
         pricing = CLAUDE_PRICING.get(model, CLAUDE_PRICING["claude-3-5-sonnet-latest"])
@@ -209,8 +247,31 @@ Output the translated JSON only, without any explanation."""
             # 计算所有批次的总 tokens
             total_input_tokens = batch_tokens * num_batches * len(target_languages)
         
-        # 估算输出 tokens（基于输入的 1.8 倍）
-        estimated_output_tokens = int(total_input_tokens * 0.8)  # 输出通常略少于输入
+        # 估算输出 tokens（根据目标语言调整）
+        # 中文到不同语言的典型长度变化
+        output_multipliers = {
+            'en': 0.5,      # 英文通常比中文短
+            'ja': 0.7,      # 日文略短
+            'ko': 0.8,      # 韩文略短
+            'es': 0.9,      # 西班牙语接近
+            'fr': 0.9,      # 法语接近
+            'de': 1.0,      # 德语略长
+            'ru': 0.9,      # 俄语接近
+            'ar': 0.8,      # 阿拉伯语略短
+            'pt': 0.9,      # 葡萄牙语接近
+            'it': 0.9,      # 意大利语接近
+        }
+        
+        # 计算平均输出倍数
+        total_multiplier = 0
+        for lang in target_languages:
+            # 使用语言代码的前两个字符匹配
+            lang_code = lang[:2].lower()
+            multiplier = output_multipliers.get(lang_code, 0.85)  # 默认 0.85
+            total_multiplier += multiplier
+        
+        avg_multiplier = total_multiplier / len(target_languages) if target_languages else 0.85
+        estimated_output_tokens = int(total_input_tokens * avg_multiplier)
         
         # 获取定价信息
         pricing = CLAUDE_PRICING.get(model, CLAUDE_PRICING["claude-3-5-sonnet-latest"])
