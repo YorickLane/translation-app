@@ -292,16 +292,25 @@ Output the translated JSON only, without any explanation."""
             "method": "api_count",
             "model": model,
             "model_name": pricing["name"],
+            "file_size": len(json.dumps(data, ensure_ascii=False)),
+            "num_keys": len(data),
             "num_languages": len(target_languages),
             "num_batches": num_batches,
+            "batch_size": BATCH_SIZE,
             "sample_batch_tokens": batch_tokens,
+            "estimated_input_tokens": total_input_tokens,  # 添加这个字段
             "total_input_tokens": total_input_tokens,
             "estimated_output_tokens": estimated_output_tokens,
+            "estimated_total_tokens": total_input_tokens + estimated_output_tokens,  # 添加这个字段
             "total_tokens": total_input_tokens + estimated_output_tokens,
             "input_cost_usd": round(input_cost, 4),
             "output_cost_usd": round(output_cost, 4),
             "total_cost_usd": round(total_cost, 4),
             "total_cost_cny": round(total_cost * 7.3, 4),
+            "pricing": {
+                "input_per_million": pricing["input"],
+                "output_per_million": pricing["output"]
+            },
             "accuracy_note": "使用 API 精确计算输入 tokens，输出基于经验估算"
         }
         
