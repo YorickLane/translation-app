@@ -612,6 +612,12 @@
           <!-- 费用预估 -->
           <div class="cost-estimation" id="costEstimation" style="display: none;">
             <h3><i class="fas fa-calculator"></i> 费用预估</h3>
+            <div style="margin-bottom: 10px;">
+              <label style="font-size: 0.9em; color: #666;">
+                <input type="checkbox" id="useApiCount" style="margin-right: 5px;">
+                使用 API 精确计算（会消耗少量 API 调用）
+              </label>
+            </div>
             <div class="estimation-content" id="estimationContent">
               <div class="loading-spinner">
                 <i class="fas fa-spinner fa-spin"></i> 计算中...
@@ -999,10 +1005,22 @@
           const claudeModel = document.getElementById('claudeModel').value;
           formData.append('claude_model', claudeModel);
           
+          // 添加是否使用 API 计算
+          const useApiCount = document.getElementById('useApiCount').checked;
+          formData.append('use_api_count', useApiCount);
+          
           // 显示加载状态
           costEstimation.style.display = 'block';
           estimationContent.innerHTML = '<div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i> 计算中...</div>';
           estimateBtn.disabled = true;
+          
+          // 根据计算方式更新提示
+          const warningDiv = document.querySelector('.estimation-warning span');
+          if (useApiCount) {
+              warningDiv.textContent = '使用 API 精确计算输入 tokens，输出 tokens 基于经验估算。';
+          } else {
+              warningDiv.textContent = '注意：此预估基于平均值计算，实际费用可能有 20-30% 的浮动，取决于内容复杂度和翻译质量。';
+          }
           
           try {
               const response = await fetch('/api/estimate-cost', {

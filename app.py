@@ -3,7 +3,7 @@
 from translate import translate_text, translate_file, create_zip
 from translate_claude import translate_json_file_claude
 from claude_models import get_claude_models
-from claude_token_counter import count_tokens_for_translation, format_cost_summary
+from claude_token_counter import count_tokens_for_translation, count_tokens_with_api, format_cost_summary
 from flask import Flask, request, render_template, send_from_directory, flash, redirect, jsonify
 import logging
 from werkzeug.utils import secure_filename
@@ -279,12 +279,32 @@ def estimate_cost():
         with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp_file:
             file.save(tmp_file.name)
             
-            # 计算 token 和费用
-            token_info = count_tokens_for_translation(
-                tmp_file.name, 
-                target_languages, 
-                claude_model
-            )
+            # 获取计算方式（默认使用估算）
+            use_api_count = request.form.get("use_api_count", "false") == "true"
+            
+            if use_api_count and config.CLAUDE_API_KEY:
+                # 使用 API 精确计算
+                logger.info("使用 Claude API 计算 tokens")
+                token_info = count_tokens_with_api(
+                    tmp_file.name, 
+                    target_languages, 
+                    claude_model
+                )
+                if not token_info:
+                    # 如果 API 计算失败，回退到估算
+                    logger.warning("API 计算失败，使用估算方法")
+                    token_info = count_tokens_for_translation(
+                        tmp_file.name, 
+                        target_languages, 
+                        claude_model
+                    )
+            else:
+                # 使用估算方法
+                token_info = count_tokens_for_translation(
+                    tmp_file.name, 
+                    target_languages, 
+                    claude_model
+                )
             
             # 删除临时文件
             os.unlink(tmp_file.name)

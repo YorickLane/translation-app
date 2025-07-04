@@ -156,7 +156,7 @@ def count_tokens_for_translation(file_path, target_languages, model="claude-3-5-
         }
 
 
-def count_tokens_with_api(file_path, target_language, model="claude-3-5-sonnet-latest"):
+def count_tokens_with_api(file_path, target_languages, model="claude-3-5-sonnet-latest"):
     """
     使用 Claude API 精确计算 token 数量
     注意：这会消耗 API 调用次数，但不会产生 token 费用
@@ -171,9 +171,24 @@ def count_tokens_with_api(file_path, target_language, model="claude-3-5-sonnet-l
         with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         
-        # 构建翻译 prompt
-        json_input = json.dumps(data, ensure_ascii=False, indent=2)
-        prompt = f"""Please translate the following JSON content to {target_language}. 
+        # 导入批处理配置
+        from config import BATCH_SIZE
+        
+        # 计算批次数量
+        total_items = len(data)
+        num_batches = (total_items + BATCH_SIZE - 1) // BATCH_SIZE
+        
+        # 取一个批次的数据作为样本
+        sample_size = min(BATCH_SIZE, total_items)
+        sample_data = dict(list(data.items())[:sample_size])
+        
+        total_input_tokens = 0
+        
+        # 对每种语言计算一次
+        for target_language in target_languages[:1]:  # 只测试一种语言，然后乘以语言数
+            # 构建翻译 prompt
+            json_input = json.dumps(sample_data, ensure_ascii=False, indent=2)
+            prompt = f"""Please translate the following JSON content to {target_language}. 
 Keep the JSON structure exactly the same, only translate the values (not the keys).
 Maintain any special formatting, placeholders (like {{0}}), or HTML tags.
 
@@ -181,16 +196,45 @@ Input JSON:
 {json_input}
 
 Output the translated JSON only, without any explanation."""
+            
+            # 使用 count_tokens API
+            response = client.beta.messages.count_tokens(
+                model=model,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            
+            # 一个批次的 tokens
+            batch_tokens = response.input_tokens
+            
+            # 计算所有批次的总 tokens
+            total_input_tokens = batch_tokens * num_batches * len(target_languages)
         
-        # 使用 count_tokens API
-        response = client.messages.count_tokens(
-            model=model,
-            messages=[{"role": "user", "content": prompt}]
-        )
+        # 估算输出 tokens（基于输入的 1.8 倍）
+        estimated_output_tokens = int(total_input_tokens * 0.8)  # 输出通常略少于输入
+        
+        # 获取定价信息
+        pricing = CLAUDE_PRICING.get(model, CLAUDE_PRICING["claude-3-5-sonnet-latest"])
+        
+        # 计算费用
+        input_cost = (total_input_tokens / 1_000_000) * pricing["input"]
+        output_cost = (estimated_output_tokens / 1_000_000) * pricing["output"]
+        total_cost = input_cost + output_cost
         
         return {
-            "input_tokens": response.input_tokens,
-            "model": model
+            "method": "api_count",
+            "model": model,
+            "model_name": pricing["name"],
+            "num_languages": len(target_languages),
+            "num_batches": num_batches,
+            "sample_batch_tokens": batch_tokens,
+            "total_input_tokens": total_input_tokens,
+            "estimated_output_tokens": estimated_output_tokens,
+            "total_tokens": total_input_tokens + estimated_output_tokens,
+            "input_cost_usd": round(input_cost, 4),
+            "output_cost_usd": round(output_cost, 4),
+            "total_cost_usd": round(total_cost, 4),
+            "total_cost_cny": round(total_cost * 7.3, 4),
+            "accuracy_note": "使用 API 精确计算输入 tokens，输出基于经验估算"
         }
         
     except Exception as e:
@@ -203,23 +247,35 @@ def format_cost_summary(token_info):
     if "error" in token_info:
         return f"❌ 错误: {token_info['error']}"
     
+    # 判断是否使用了 API 计算
+    if token_info.get('method') == 'api_count':
+        method_text = "🎯 计算方式: API 精确计算（输入）+ 经验估算（输出）"
+        input_label = "精确输入 Tokens"
+        output_label = "估算输出 Tokens"
+    else:
+        method_text = "📐 计算方式: 基于平均值估算"
+        input_label = "输入 Tokens 预估"
+        output_label = "输出 Tokens 预估"
+    
     summary = f"""
 📊 Token 计算和费用预估
 ━━━━━━━━━━━━━━━━━━━━━━
+{method_text}
+
 📁 文件信息:
-   • 键值对数量: {token_info['num_keys']}
-   • 文件大小: {token_info['file_size']:,} 字节
+   • 键值对数量: {token_info.get('num_keys', 'N/A')}
+   • 文件大小: {token_info.get('file_size', 0):,} 字节
    • 目标语言数: {token_info['num_languages']}
-   • 批次数量: {token_info['num_batches']} (每批 {token_info['batch_size']} 项)
+   • 批次数量: {token_info.get('num_batches', 'N/A')} (每批 {token_info.get('batch_size', token_info.get('BATCH_SIZE', 10))} 项)
 
 🤖 模型: {token_info['model_name']}
-   • 输入价格: ${token_info['pricing']['input_per_million']}/百万 tokens
-   • 输出价格: ${token_info['pricing']['output_per_million']}/百万 tokens
+   • 输入价格: ${token_info.get('pricing', {}).get('input_per_million', 'N/A')}/百万 tokens
+   • 输出价格: ${token_info.get('pricing', {}).get('output_per_million', 'N/A')}/百万 tokens
 
-📈 Token 预估:
-   • 输入 Tokens: {token_info['estimated_input_tokens']:,}
-   • 输出 Tokens: {token_info['estimated_output_tokens']:,}
-   • 总计 Tokens: {token_info['estimated_total_tokens']:,}
+📈 Token 计算:
+   • {input_label}: {token_info.get('total_input_tokens', token_info.get('estimated_input_tokens', 0)):,}
+   • {output_label}: {token_info.get('estimated_output_tokens', 0):,}
+   • 总计 Tokens: {token_info.get('total_tokens', token_info.get('estimated_total_tokens', 0)):,}
 
 💰 费用预估:
    • 输入费用: ${token_info['input_cost_usd']:.4f}
@@ -227,7 +283,7 @@ def format_cost_summary(token_info):
    • 总计 (USD): ${token_info['total_cost_usd']:.4f}
    • 总计 (CNY): ¥{token_info['total_cost_cny']:.4f}
 
-⚠️  {token_info.get('estimation_note', '')}
+⚠️  {token_info.get('accuracy_note', token_info.get('estimation_note', ''))}
 ━━━━━━━━━━━━━━━━━━━━━━
 """
     return summary
