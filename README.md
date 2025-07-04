@@ -112,7 +112,26 @@ python app.py            # 启动应用
 - 可视化展示所有已选语言
 - 点击语言标签上的"×"可快速删除
 
-### 4. 开始翻译
+### 4. 选择翻译引擎（可选）
+- **Google Translate**（默认）：免费额度内无需付费
+- **Claude API**：支持多个模型选择
+  - Claude Sonnet 4：$3/百万输入tokens，$15/百万输出tokens
+  - Claude Opus 4：$15/百万输入tokens，$75/百万输出tokens
+  - Claude 3.5 Sonnet：$3/百万输入tokens，$15/百万输出tokens
+  - 更多模型选项
+
+### 5. 费用预估（仅限Claude API）
+- 上传文件并选择语言后，点击"预估费用"按钮
+- 支持两种计算方式：
+  - **快速估算**：基于文件大小和经验系数（默认）
+  - **API精确计算**：使用Claude API计算实际tokens（更准确）
+- 显示详细费用明细：
+  - 输入/输出tokens数量
+  - 各部分费用（美元/人民币）
+  - 批处理信息
+- 准确度：单语言翻译约94%准确，多语言翻译约78%准确
+
+### 6. 开始翻译
 - 选择文件和目标语言后，"开始翻译"按钮自动启用
 - 点击按钮开始翻译过程
 - 实时进度条显示翻译进度
@@ -123,7 +142,7 @@ python app.py            # 启动应用
   - 已完成项数/总项数
 - Socket.IO实时通信确保进度准确更新
 
-### 5. 下载结果
+### 7. 下载结果
 - 翻译完成后自动跳转到结果页面
 - 大型下载按钮，支持一键下载ZIP压缩包
 - ZIP文件包含所有目标语言的翻译版本
@@ -165,6 +184,8 @@ translation-app/
 ├── test_credentials.py   # 凭证测试脚本
 ├── check_api_status.py   # API状态检查工具
 ├── translate_claude.py   # Claude API翻译模块
+├── claude_token_counter.py # Claude token计算和费用预估
+├── claude_models.py      # Claude模型配置管理
 ├── split_json.py         # JSON文件分割工具
 ├── example.json          # 示例JSON文件用于测试
 ├── test-small.json       # 小型测试文件

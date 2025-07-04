@@ -64,9 +64,16 @@ This is a Flask-based web application for translating JavaScript and JSON files 
    - Estimates token usage for translation tasks
    - Supports all Claude models with 2025 pricing
    - Provides cost estimation in USD and CNY
+   - Batch-aware calculation for accurate estimates
+   - Optional API-based precise token counting
+   - Language-specific output multipliers
    - Accessible via `/api/estimate-cost` endpoint
 
-5. **Frontend Architecture**:
+5. **claude_models.py**: Claude model configuration
+   - Manages available Claude models
+   - Provides model listing API
+
+6. **Frontend Architecture**:
    - Modern Material Design-inspired UI
    - Real-time progress tracking with Socket.IO client
    - Drag-and-drop file upload
