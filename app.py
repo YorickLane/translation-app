@@ -20,6 +20,7 @@ from google.auth.exceptions import RefreshError
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 socketio = SocketIO(app, async_mode='threading')
 
 # Configuration
