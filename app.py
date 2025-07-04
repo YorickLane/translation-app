@@ -284,7 +284,8 @@ def estimate_cost():
             
             if use_api_count and config.CLAUDE_API_KEY:
                 # 使用 API 精确计算
-                logger.info("使用 Claude API 计算 tokens")
+                logger.info(f"使用 Claude API 计算 tokens, 模型: {claude_model}")
+                logger.info(f"目标语言: {target_languages}")
                 token_info = count_tokens_with_api(
                     tmp_file.name, 
                     target_languages, 

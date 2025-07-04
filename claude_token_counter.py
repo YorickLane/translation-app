@@ -236,10 +236,17 @@ Input JSON:
 Output the translated JSON only, without any explanation."""
             
             # 使用 count_tokens API
-            response = client.beta.messages.count_tokens(
-                model=model,
-                messages=[{"role": "user", "content": prompt}]
-            )
+            try:
+                response = client.beta.messages.count_tokens(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+            except AttributeError:
+                # 如果 beta 接口不可用，尝试直接调用
+                response = client.messages.count_tokens(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}]
+                )
             
             # 一个批次的 tokens
             batch_tokens = response.input_tokens
@@ -300,6 +307,10 @@ Output the translated JSON only, without any explanation."""
         
     except Exception as e:
         logger.error(f"API token 计算失败: {e}")
+        logger.error(f"错误类型: {type(e).__name__}")
+        logger.error(f"错误详情: {str(e)}")
+        import traceback
+        logger.error(f"错误堆栈: {traceback.format_exc()}")
         return None
 
 
