@@ -80,25 +80,40 @@ def count_tokens_for_translation(file_path, target_languages, model="claude-3-5-
         with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         
-        # 估算方法：
-        # 1. 输入 tokens = 原文本 + prompt 模板
-        # 2. 输出 tokens ≈ 输入 tokens * 1.2 (翻译通常会稍微增加长度)
+        # 导入批处理配置
+        from config import BATCH_SIZE
         
-        # 计算原始文本的字符数
-        total_chars = 0
-        for key, value in data.items():
-            total_chars += len(key) + len(str(value))
+        # 计算批次数量
+        total_items = len(data)
+        num_batches = (total_items + BATCH_SIZE - 1) // BATCH_SIZE
         
-        # 估算 tokens (1 token ≈ 4 characters)
-        base_tokens = total_chars // 4
+        # 更准确的 token 估算：
+        # 1. JSON 序列化后的实际大小（包含缩进、引号等）
+        json_str = json.dumps(data, ensure_ascii=False, indent=2)
+        json_chars = len(json_str)
         
-        # 每个翻译任务的 prompt 模板大约 200 tokens
-        prompt_tokens_per_language = 200
+        # 2. 更准确的字符到 token 转换率
+        # 对于 JSON 内容，1 token ≈ 3 characters（考虑到特殊字符和格式）
+        json_tokens_per_batch = json_chars // 3
         
-        # 计算总的输入和输出 tokens
+        # 3. Prompt 模板的实际大小（每批）
+        # 包含指令、示例、格式说明等
+        prompt_template_tokens = 800  # 实际 prompt 更长
+        
+        # 4. 每批的输入 tokens
+        # 注意：每批都包含部分 JSON 数据，不是整个文件
+        avg_tokens_per_batch = json_tokens_per_batch // num_batches
+        input_tokens_per_batch = avg_tokens_per_batch + prompt_template_tokens
+        
+        # 5. 输出 tokens 估算
+        # 翻译后的文本通常比原文长 1.5-2 倍（取决于语言）
+        output_multiplier = 1.8  # 更保守的估计
+        output_tokens_per_batch = int(avg_tokens_per_batch * output_multiplier)
+        
+        # 6. 计算所有语言的总 tokens
         num_languages = len(target_languages)
-        total_input_tokens = (base_tokens + prompt_tokens_per_language) * num_languages
-        total_output_tokens = int(base_tokens * 1.2 * num_languages)  # 翻译后文本通常稍长
+        total_input_tokens = input_tokens_per_batch * num_batches * num_languages
+        total_output_tokens = output_tokens_per_batch * num_batches * num_languages
         
         # 获取定价信息
         pricing = CLAUDE_PRICING.get(model, CLAUDE_PRICING["claude-3-5-sonnet-latest"])
@@ -111,9 +126,11 @@ def count_tokens_for_translation(file_path, target_languages, model="claude-3-5-
         return {
             "model": model,
             "model_name": pricing["name"],
-            "file_size": len(json.dumps(data, ensure_ascii=False)),
+            "file_size": len(json_str),
             "num_keys": len(data),
             "num_languages": num_languages,
+            "num_batches": num_batches,
+            "batch_size": BATCH_SIZE,
             "estimated_input_tokens": total_input_tokens,
             "estimated_output_tokens": total_output_tokens,
             "estimated_total_tokens": total_input_tokens + total_output_tokens,
@@ -124,7 +141,8 @@ def count_tokens_for_translation(file_path, target_languages, model="claude-3-5-
             "pricing": {
                 "input_per_million": pricing["input"],
                 "output_per_million": pricing["output"]
-            }
+            },
+            "estimation_note": "预估可能有 20-30% 的误差，实际费用取决于内容复杂度"
         }
         
     except Exception as e:
@@ -192,6 +210,7 @@ def format_cost_summary(token_info):
    • 键值对数量: {token_info['num_keys']}
    • 文件大小: {token_info['file_size']:,} 字节
    • 目标语言数: {token_info['num_languages']}
+   • 批次数量: {token_info['num_batches']} (每批 {token_info['batch_size']} 项)
 
 🤖 模型: {token_info['model_name']}
    • 输入价格: ${token_info['pricing']['input_per_million']}/百万 tokens
@@ -207,6 +226,8 @@ def format_cost_summary(token_info):
    • 输出费用: ${token_info['output_cost_usd']:.4f}
    • 总计 (USD): ${token_info['total_cost_usd']:.4f}
    • 总计 (CNY): ¥{token_info['total_cost_cny']:.4f}
+
+⚠️  {token_info.get('estimation_note', '')}
 ━━━━━━━━━━━━━━━━━━━━━━
 """
     return summary

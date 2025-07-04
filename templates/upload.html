@@ -262,6 +262,24 @@
         border: 1px solid #ddd;
         max-height: 400px;
         overflow-y: auto;
+        line-height: 1.6;
+      }
+      
+      .estimation-warning {
+        background: #fff3cd;
+        border: 1px solid #ffeaa7;
+        color: #856404;
+        padding: 10px 15px;
+        border-radius: 6px;
+        margin-top: 10px;
+        font-size: 0.9em;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      
+      .estimation-warning i {
+        color: #f39c12;
       }
       
       .estimate-btn {
@@ -598,6 +616,10 @@
               <div class="loading-spinner">
                 <i class="fas fa-spinner fa-spin"></i> 计算中...
               </div>
+            </div>
+            <div class="estimation-warning">
+              <i class="fas fa-exclamation-triangle"></i>
+              <span>注意：此预估基于平均值计算，实际费用可能有 20-30% 的浮动，取决于内容复杂度和翻译质量。</span>
             </div>
           </div>
 
