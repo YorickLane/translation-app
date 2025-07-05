@@ -60,6 +60,19 @@ def translate_with_claude(texts, target_language="en", model=None):
 Keep the JSON structure exactly the same, only translate the values (not the keys).
 Maintain any special formatting, placeholders (like {{0}}), or HTML tags.
 
+IMPORTANT FORMATTING RULES for {target_lang_name}:
+- All translated text should follow proper capitalization rules
+- UI elements, buttons, and interface text should have proper title case or sentence case
+- The first letter of each translated value should be capitalized unless it's a continuation of a sentence
+- Maintain consistency in capitalization throughout the translation
+- For English: Use proper sentence case (first letter capitalized) for UI elements like "Confirm", "Cancel", "Save", "Edit", "Delete"
+
+Examples for English:
+- "确定" → "Confirm" (not "confirm")
+- "取消" → "Cancel" (not "cancel") 
+- "保存" → "Save" (not "save")
+- "编辑" → "Edit" (not "edit")
+
 Input JSON:
 {json_input}
 
@@ -71,7 +84,7 @@ Output the translated JSON only, without any explanation."""
         response = client.messages.create(
             model=selected_model,  # 使用选定的模型
             max_tokens=4096,
-            temperature=0.3,  # 降低温度以获得更一致的翻译
+            temperature=0.1,  # 极低温度以获得最一致的翻译和格式
             messages=[{"role": "user", "content": prompt}],
         )
         logger.info(f"[Claude API] 成功收到响应，模型: {selected_model}")
