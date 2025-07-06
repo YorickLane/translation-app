@@ -9,7 +9,18 @@ import json
 import time
 import logging
 from anthropic import Anthropic
-from config import CLAUDE_API_KEY, CLAUDE_MODEL, BATCH_SIZE, REQUEST_DELAY
+from config import CLAUDE_API_KEY, CLAUDE_MODEL, BATCH_SIZE, REQUEST_DELAY, MAX_RETRIES
+try:
+    from translation_config import (
+        TEMPERATURE_BY_LANGUAGE, 
+        LANGUAGE_CODE_MAPPING,
+        BATCH_CONFIG
+    )
+    from translation_postprocess import post_process_translation, validate_translation_quality
+    USE_ADVANCED_CONFIG = True
+except ImportError:
+    USE_ADVANCED_CONFIG = False
+    logger.warning("高级配置未找到，使用默认设置")
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -40,6 +51,40 @@ LANGUAGE_NAMES = {
 }
 
 
+def _contains_too_much_english(translations):
+    """检测翻译结果中是否包含过多英文"""
+    import re
+    
+    english_pattern = re.compile(r'[A-Za-z]{3,}')  # 至少3个连续英文字母
+    total_values = 0
+    english_values = 0
+    
+    for key, value in translations.items():
+        if isinstance(value, str):
+            total_values += 1
+            # 检查是否包含明显的英文单词
+            if english_pattern.search(value):
+                # 检查一些常见的英文UI词汇
+                common_english_words = [
+                    'Please', 'Enter', 'Select', 'Password', 'Login',
+                    'Settings', 'Edit', 'Delete', 'Clear', 'Copy',
+                    'Download', 'Upload', 'Cancel', 'Confirm', 'Save',
+                    'verification', 'progress', 'merchant', 'payment'
+                ]
+                
+                for word in common_english_words:
+                    if word.lower() in value.lower():
+                        english_values += 1
+                        break
+    
+    # 如果超过20%的值包含英文，认为有问题
+    if total_values > 0:
+        english_ratio = english_values / total_values
+        return english_ratio > 0.2
+    
+    return False
+
+
 def translate_with_claude(texts, target_language="en", model=None):
     """使用Claude API翻译文本"""
     if not CLAUDE_API_KEY:
@@ -49,42 +94,88 @@ def translate_with_claude(texts, target_language="en", model=None):
     
     # 使用传入的模型或默认模型
     selected_model = model or CLAUDE_MODEL
+    
+    # 处理语言代码映射
+    if USE_ADVANCED_CONFIG and target_language in LANGUAGE_CODE_MAPPING:
+        api_language_code = LANGUAGE_CODE_MAPPING[target_language]
+        logger.info(f"语言代码映射: {target_language} -> {api_language_code}")
+    else:
+        api_language_code = target_language
 
     # 准备翻译提示
-    target_lang_name = LANGUAGE_NAMES.get(target_language, target_language)
+    target_lang_name = LANGUAGE_NAMES.get(api_language_code, api_language_code)
 
     # 构建JSON格式的输入
     json_input = json.dumps(texts, ensure_ascii=False, indent=2)
 
+    # 语言特定的大写规则
+    capitalization_rules = {
+        "en": """- Use title case for UI elements and buttons (e.g., "Confirm", "Cancel", "Save")
+- Use sentence case for longer phrases and messages
+- Capitalize proper nouns and the first word of sentences""",
+        
+        "de": """- Capitalize all nouns (Substantive)
+- Do NOT capitalize verbs, adjectives, or other parts of speech unless they start a sentence
+- Examples: "speichern" (save), "Einstellungen" (settings), "Datei bearbeiten" (edit file)""",
+        
+        "es": """- Use lowercase for UI elements unless they start a sentence
+- Examples: "confirmar", "cancelar", "guardar", "editar"
+- Only capitalize proper nouns and sentence beginnings""",
+        
+        "fr": """- Use lowercase for UI elements unless they start a sentence
+- Examples: "confirmer", "annuler", "enregistrer", "modifier"
+- Only capitalize proper nouns and sentence beginnings""",
+        
+        "it": """- Use lowercase for UI elements unless they start a sentence
+- Examples: "conferma", "annulla", "salva", "modifica"
+- Only capitalize proper nouns and sentence beginnings""",
+        
+        "pt": """- Use lowercase for UI elements unless they start a sentence
+- Examples: "confirmar", "cancelar", "salvar", "editar"
+- Only capitalize proper nouns and sentence beginnings""",
+        
+        "zh-TW": """- 这是繁体中文，请确保使用繁体字而不是简体字
+- 不要返回英文翻译，必须翻译成繁体中文
+- 例如："确定" → "確定"，"取消" → "取消"，"保存" → "儲存" """,
+        
+        "zh-Hant": """- 这是繁体中文，请确保使用繁体字而不是简体字
+- 不要返回英文翻译，必须翻译成繁体中文
+- 例如："确定" → "確定"，"取消" → "取消"，"保存" → "儲存" """
+    }
+    
+    # 获取特定语言的规则，如果没有则使用通用规则
+    specific_rules = capitalization_rules.get(target_language, 
+        "- Follow the standard capitalization rules for this language\n- Be consistent throughout the translation")
+
     prompt = f"""Please translate the following JSON content to {target_lang_name}. 
-Keep the JSON structure exactly the same, only translate the values (not the keys).
-Maintain any special formatting, placeholders (like {{0}}), or HTML tags.
 
-IMPORTANT FORMATTING RULES for {target_lang_name}:
-- All translated text should follow proper capitalization rules
-- UI elements, buttons, and interface text should have proper title case or sentence case
-- The first letter of each translated value should be capitalized unless it's a continuation of a sentence
-- Maintain consistency in capitalization throughout the translation
-- For English: Use proper sentence case (first letter capitalized) for UI elements like "Confirm", "Cancel", "Save", "Edit", "Delete"
+CRITICAL REQUIREMENTS:
+1. Keep the JSON structure exactly the same, only translate the values (not the keys)
+2. NEVER return English translations for non-English target languages
+3. You MUST translate to {target_lang_name} ({target_language})
+4. Maintain any special formatting, placeholders (like {{{{0}}}}), or HTML tags
 
-Examples for English:
-- "确定" → "Confirm" (not "confirm")
-- "取消" → "Cancel" (not "cancel") 
-- "保存" → "Save" (not "save")
-- "编辑" → "Edit" (not "edit")
+CAPITALIZATION RULES for {target_lang_name}:
+{specific_rules}
 
 Input JSON:
 {json_input}
 
-Output the translated JSON only, without any explanation."""
+Output the translated JSON only, without any explanation. Remember: translate to {target_lang_name}, NOT English!"""
 
     try:
         # 调用Claude API
         logger.info(f"[Claude API] 发送请求到模型: {selected_model}")
+        # 获取温度设置
+        temperature = 0.1  # 默认值
+        if USE_ADVANCED_CONFIG and target_language in TEMPERATURE_BY_LANGUAGE:
+            temperature = TEMPERATURE_BY_LANGUAGE[target_language]
+            logger.info(f"使用特定温度设置: {temperature} (语言: {target_language})")
+        
         response = client.messages.create(
             model=selected_model,  # 使用选定的模型
             max_tokens=4096,
-            temperature=0.1,  # 极低温度以获得最一致的翻译和格式
+            temperature=temperature,  # 使用语言特定的温度
             messages=[{"role": "user", "content": prompt}],
         )
         logger.info(f"[Claude API] 成功收到响应，模型: {selected_model}")
@@ -95,6 +186,11 @@ Output the translated JSON only, without any explanation."""
         # 尝试解析JSON
         try:
             translated_data = json.loads(translated_json)
+            
+            # 应用后处理
+            if USE_ADVANCED_CONFIG:
+                translated_data = post_process_translation(translated_data, target_language)
+            
             return translated_data
         except json.JSONDecodeError:
             # 如果解析失败，尝试清理响应
@@ -151,8 +247,31 @@ def translate_json_file_claude(source_file_path, target_language="en", progress_
 
         except Exception as e:
             logger.error(f"批次 {batch_num} 翻译失败: {e}")
-            # 保留原文
-            translated_data.update(batch_items)
+            # 重试机制
+            retry_count = 0
+            max_retries = 3
+            
+            while retry_count < max_retries:
+                retry_count += 1
+                logger.info(f"重试批次 {batch_num} (尝试 {retry_count}/{max_retries})")
+                
+                try:
+                    time.sleep(REQUEST_DELAY * 2)  # 延长等待时间
+                    translated_batch = translate_with_claude(batch_items, target_language, selected_model)
+                    
+                    # 验证翻译结果
+                    if target_language != "en" and _contains_too_much_english(translated_batch):
+                        logger.warning(f"批次 {batch_num} 包含过多英文，重试...")
+                        continue
+                    
+                    translated_data.update(translated_batch)
+                    break
+                except Exception as retry_e:
+                    logger.error(f"重试失败: {retry_e}")
+                    if retry_count == max_retries:
+                        # 最终失败，保留原文
+                        logger.error(f"批次 {batch_num} 多次重试失败，保留原文")
+                        translated_data.update(batch_items)
 
     # 保存结果
     output_file_name = f"{target_language}.json"

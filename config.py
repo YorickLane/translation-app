@@ -60,6 +60,16 @@ CLAUDE_MODELS = [
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 ALLOWED_EXTENSIONS = {"json", "js"}
 
-# 批处理配置
-BATCH_SIZE = 10  # 每批处理的项目数
-REQUEST_DELAY = 0.5  # 请求间隔（秒）
+# 批处理配置（可被 translation_config.py 覆盖）
+BATCH_SIZE = 5  # 每批处理的项目数（减小以提高成功率）
+REQUEST_DELAY = 1.0  # 请求间隔（秒，增加以避免速率限制）
+MAX_RETRIES = 3  # 最大重试次数
+
+# 尝试加载高级配置
+try:
+    from translation_config import BATCH_CONFIG
+    BATCH_SIZE = BATCH_CONFIG.get('size', BATCH_SIZE)
+    REQUEST_DELAY = BATCH_CONFIG.get('request_delay', REQUEST_DELAY)
+    MAX_RETRIES = BATCH_CONFIG.get('max_retries', MAX_RETRIES)
+except ImportError:
+    pass
