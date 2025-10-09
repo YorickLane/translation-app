@@ -504,8 +504,26 @@
         transform: translateY(-1px);
       }
 
+      .queue-control-btn:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+        transform: none;
+      }
+
       .queue-control-btn i {
         margin-right: 5px;
+      }
+
+      .queue-control-btn.download-all {
+        background: #28a745;
+      }
+
+      .queue-control-btn.download-all:hover {
+        background: #218838;
+      }
+
+      .queue-control-btn.download-all:disabled {
+        background: #ccc;
       }
 
       .file-queue-list {
@@ -632,6 +650,19 @@
         background: #0bb5d7;
       }
 
+      .btn-download {
+        background: #28a745;
+        color: white;
+      }
+
+      .btn-download:hover {
+        background: #218838;
+      }
+
+      .btn-download i {
+        margin-right: 4px;
+      }
+
       .queue-summary {
         background: white;
         border-radius: 8px;
@@ -741,6 +772,9 @@
               <div class="queue-header">
                 <h4><i class="fas fa-tasks"></i> 文件队列 <span id="queueCount">(0)</span></h4>
                 <div class="queue-controls">
+                  <button type="button" class="queue-control-btn download-all" id="downloadAllBtn" title="下载所有已完成的文件" disabled>
+                    <i class="fas fa-download"></i> 下载全部
+                  </button>
                   <button type="button" class="queue-control-btn" id="clearQueueBtn" title="清空队列">
                     <i class="fas fa-trash"></i> 清空
                   </button>
@@ -944,8 +978,8 @@
 
             progressText.innerText = displayText;
 
-            // 检查是否完成
-            if (data.complete && data.redirect_url) {
+            // 检查是否完成 - 只在非批量处理模式下自动跳转
+            if (data.complete && data.redirect_url && !isProcessing) {
                 // 延迟一下让用户看到100%完成
                 setTimeout(() => {
                     window.location.href = data.redirect_url;
@@ -1058,6 +1092,7 @@
                           <div class="queue-item-details">
                               ${(item.file.size / 1024).toFixed(1)} KB
                               ${item.error ? ` • <span style="color: #dc3545;">${item.error}</span>` : ''}
+                              ${item.result ? ` • <span style="color: #28a745;">翻译完成</span>` : ''}
                           </div>
                           ${item.status === 'processing' ? `
                               <div class="queue-item-progress">
@@ -1067,6 +1102,11 @@
                       </div>
                       <div class="queue-item-status ${statusClass}">${statusText}</div>
                       <div class="queue-item-actions">
+                          ${item.status === 'completed' && item.result ? `
+                              <button class="queue-item-btn btn-download" onclick="downloadFile(${index})">
+                                  <i class="fas fa-download"></i> 下载
+                              </button>
+                          ` : ''}
                           ${item.status === 'failed' ? `
                               <button class="queue-item-btn btn-retry" onclick="retryFile(${index})">
                                   <i class="fas fa-redo"></i> 重试
@@ -1118,6 +1158,14 @@
               : 0;
           document.getElementById('queueProgressBar').style.width = totalProgress + '%';
           document.getElementById('queueProgressText').textContent = Math.round(totalProgress) + '%';
+
+          // 更新"下载全部"按钮状态
+          const downloadAllBtn = document.getElementById('downloadAllBtn');
+          const completedWithResults = fileQueue.filter(f => f.status === 'completed' && f.result).length;
+          downloadAllBtn.disabled = completedWithResults === 0;
+          if (completedWithResults > 0) {
+              downloadAllBtn.title = `下载 ${completedWithResults} 个已完成的文件`;
+          }
       }
 
       function removeFile(index) {
@@ -1147,8 +1195,40 @@
           updateSubmitButton();
       }
 
+      // 下载单个文件
+      function downloadFile(index) {
+          const fileItem = fileQueue[index];
+          if (fileItem && fileItem.result) {
+              // 打开下载链接
+              window.location.href = fileItem.result;
+          }
+      }
+
+      // 下载所有已完成的文件
+      function downloadAll() {
+          const completedFiles = fileQueue.filter(f => f.status === 'completed' && f.result);
+
+          if (completedFiles.length === 0) {
+              alert('没有可下载的文件');
+              return;
+          }
+
+          // 逐个触发下载，间隔500ms避免浏览器阻止
+          completedFiles.forEach((file, index) => {
+              setTimeout(() => {
+                  window.location.href = file.result;
+              }, index * 500);
+          });
+
+          // 提示用户
+          alert(`开始下载 ${completedFiles.length} 个文件\n\n如果浏览器阻止了下载，请在弹出窗口中允许下载。`);
+      }
+
       // 清空队列按钮
       document.getElementById('clearQueueBtn').addEventListener('click', clearQueue);
+
+      // 下载全部按钮
+      document.getElementById('downloadAllBtn').addEventListener('click', downloadAll);
 
       // 语言搜索功能
       const searchInput = document.getElementById('languageSearch');
@@ -1412,9 +1492,18 @@
                   formData.append('claude_model', claudeModel);
               }
 
+              let checkCompleteInterval = null;
+
               // 监听这个文件的进度更新
               const progressHandler = (data) => {
                   fileItem.progress = data.progress || 0;
+
+                  // 捕获完成信号和下载链接
+                  if (data.complete && data.redirect_url) {
+                      fileItem.result = data.redirect_url;
+                      console.log(`文件 ${fileItem.file.name} 完成，下载链接: ${data.redirect_url}`);
+                  }
+
                   updateFileQueueUI();
               };
 
@@ -1430,9 +1519,9 @@
                       throw new Error('翻译请求失败');
                   }
                   // 等待完成信号
-                  const checkComplete = setInterval(() => {
-                      if (fileItem.progress >= 100) {
-                          clearInterval(checkComplete);
+                  checkCompleteInterval = setInterval(() => {
+                      if (fileItem.progress >= 100 || (fileItem.result && fileItem.progress > 90)) {
+                          clearInterval(checkCompleteInterval);
                           socket.off('progress', progressHandler);
                           resolve();
                       }
@@ -1440,12 +1529,17 @@
 
                   // 超时保护 (10分钟)
                   setTimeout(() => {
-                      clearInterval(checkComplete);
+                      if (checkCompleteInterval) {
+                          clearInterval(checkCompleteInterval);
+                      }
                       socket.off('progress', progressHandler);
                       reject(new Error('翻译超时'));
                   }, 600000);
               })
               .catch(error => {
+                  if (checkCompleteInterval) {
+                      clearInterval(checkCompleteInterval);
+                  }
                   socket.off('progress', progressHandler);
                   reject(error);
               });
