@@ -12,6 +12,12 @@ logger = logging.getLogger(__name__)
 
 # Claude 模型定价 (2025年价格，单位：美元/百万 tokens)
 CLAUDE_PRICING = {
+    # Sonnet 4.5 (最新推荐)
+    "claude-sonnet-4-5-20250929": {
+        "input": 3.00,    # $3 per million input tokens
+        "output": 15.00,  # $15 per million output tokens
+        "name": "Claude Sonnet 4.5"
+    },
     # Sonnet 4
     "claude-sonnet-4-20250514": {
         "input": 3.00,    # $3 per million input tokens
@@ -29,11 +35,6 @@ CLAUDE_PRICING = {
         "input": 3.00,
         "output": 15.00,
         "name": "Claude 3.5 Sonnet (Latest)"
-    },
-    "claude-3-5-sonnet-20241022": {
-        "input": 3.00,
-        "output": 15.00,
-        "name": "Claude 3.5 Sonnet"
     },
     "claude-3-5-haiku-20241022": {
         "input": 0.80,    # $0.80 per million input tokens

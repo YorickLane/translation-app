@@ -65,7 +65,7 @@ python claude_token_counter.py
    - 进度回调支持实时更新
 
 3. **translate_claude.py** - Claude API 翻译引擎
-   - 支持所有 Claude 模型（Sonnet 4, Opus 4, 3.5 系列等）
+   - 支持所有 Claude 模型（**Sonnet 4.5**⭐, Sonnet 4, Opus 4, 3.5/3 系列）
    - 语言特定优化：
      - 大写规则（英语 title case，罗曼语系 lowercase）
      - 温度设置（繁体中文 0.05，默认 0.1）
@@ -77,7 +77,7 @@ python claude_token_counter.py
    - 两种计算模式：
      - 快速估算：基于字符数和经验系数
      - API 精确计算：使用 `messages.count_tokens()` API
-   - 2025年完整定价支持（Sonnet 4, Opus 4, 3.5/3 系列）
+   - 2025年完整定价支持（**Sonnet 4.5**, Sonnet 4, Opus 4, 3.5/3 系列）
    - 语言特定输出倍数（英文 0.5x，德语 1.0x 等）
    - 批处理感知计算
    - 双币种显示（USD/CNY，汇率 7.3）
@@ -86,7 +86,7 @@ python claude_token_counter.py
    - 实时获取可用模型列表
    - 1小时缓存机制
    - API 可用性验证
-   - 支持最新 Sonnet 4 和 Opus 4
+   - 支持最新 **Sonnet 4.5** 和 Opus 4
 
 6. **translation_config.py** (高级配置) - 翻译系统优化参数
    - 批处理配置：批次大小、延迟、重试策略
@@ -199,12 +199,20 @@ python claude_token_counter.py
    - 最终 ZIP: `output/translations_{filename}.zip`
    - 个别文件在打包后删除
 
+### Model Deprecation Notice
+
+⚠️ **重要通知**：根据 [Anthropic 官方废弃政策](https://docs.claude.com/en/docs/about-claude/model-deprecations)：
+- **claude-3-5-sonnet-20241022** 已被废弃，将于 **2025年10月22日** 退役
+- 官方推荐迁移到 **Claude Sonnet 4.5** (`claude-sonnet-4-5-20250929`)
+- 本项目已完全移除废弃模型，默认使用最新模型
+
 ### Common Development Tasks
 
 **添加新的 Claude 模型**:
 1. 在 `claude_token_counter.py` 的 `CLAUDE_PRICING` 添加定价
-2. 在 `claude_models.py` 的 `get_claude_models()` 添加模型信息
+2. 在 `claude_models.py` 的 `get_claude_models()` 和 `get_default_models()` 添加模型信息
 3. 更新 `config.py` 的 `CLAUDE_MODELS` 列表
+4. 更新 `templates/upload.html` 的 `loadDefaultModels()` 函数
 
 **修改批处理参数**:
 - 首选：创建 `translation_config.py` 并设置 `BATCH_CONFIG`
@@ -280,6 +288,11 @@ python claude_token_counter.py
 - `BILLING_TROUBLESHOOTING.md`: 计费问题排查
 - `CLAUDE_API_SETUP.md`: Claude API 设置
 - `CREATE_NEW_PROJECT.md`: 创建新项目指南
+
+官方文档：
+- [Claude Models](https://docs.claude.com/en/docs/about-claude/models)
+- [Model Deprecations](https://docs.claude.com/en/docs/about-claude/model-deprecations)
+- [API Documentation](https://docs.claude.com/en/api)
 
 ### Dependencies
 

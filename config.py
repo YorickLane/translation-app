@@ -30,9 +30,24 @@ CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-3-5-sonnet-latest")  # Def
 # 可用的 Claude 模型列表
 CLAUDE_MODELS = [
     {
-        "id": "claude-3-5-sonnet-20241022",
-        "name": "Claude 3.5 Sonnet",
-        "description": "最新最强大的 Sonnet，推荐用于翻译"
+        "id": "claude-sonnet-4-5-20250929",
+        "name": "Claude Sonnet 4.5 ⭐",
+        "description": "最新最强模型，最佳编码和复杂代理能力（推荐）"
+    },
+    {
+        "id": "claude-sonnet-4-20250514",
+        "name": "Claude Sonnet 4 ✨",
+        "description": "高智能平衡性能，适合日常翻译"
+    },
+    {
+        "id": "claude-3-5-sonnet-latest",
+        "name": "Claude 3.5 Sonnet (Latest)",
+        "description": "自动更新到最新版本的 Sonnet"
+    },
+    {
+        "id": "claude-opus-4-20250514",
+        "name": "Claude Opus 4 ⚡",
+        "description": "超高智能，适合最复杂的翻译任务"
     },
     {
         "id": "claude-3-5-haiku-20241022",
@@ -42,17 +57,12 @@ CLAUDE_MODELS = [
     {
         "id": "claude-3-opus-20240229",
         "name": "Claude 3 Opus",
-        "description": "功能强大，适合复杂翻译"
+        "description": "Claude 3 系列最强大的模型"
     },
     {
         "id": "claude-3-haiku-20240307",
         "name": "Claude 3 Haiku",
         "description": "经济快速，适合简单翻译"
-    },
-    {
-        "id": "claude-3-5-sonnet-latest",
-        "name": "Claude 3.5 Sonnet (Latest)",
-        "description": "始终使用最新版本的 Sonnet"
     }
 ]
 

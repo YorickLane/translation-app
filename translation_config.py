@@ -43,10 +43,10 @@ VALIDATION_STRENGTH = {
 # 模型推荐（根据任务类型）
 MODEL_RECOMMENDATIONS = {
     'large_batch': 'claude-3-5-haiku-20241022',      # 大批量，快速
-    'high_quality': 'claude-3-5-sonnet-20241022',    # 高质量
-    'complex': 'claude-3-opus-20240229',             # 复杂文本
+    'high_quality': 'claude-sonnet-4-5-20250929',    # 高质量（最新推荐）
+    'complex': 'claude-opus-4-20250514',             # 复杂文本
     'cost_effective': 'claude-3-haiku-20240307',     # 经济实惠
-    'default': 'claude-3-5-sonnet-20241022'          # 默认推荐
+    'default': 'claude-sonnet-4-5-20250929'          # 默认推荐（最新最强）
 }
 
 # 容易出错的术语映射（确保一致性）
