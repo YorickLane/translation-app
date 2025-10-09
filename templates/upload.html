@@ -448,6 +448,233 @@
         font-weight: 500;
       }
 
+      /* 文件队列样式 */
+      .file-queue-section {
+        margin-top: 25px;
+        padding: 20px;
+        background: #f8f9fa;
+        border-radius: 12px;
+        border: 2px solid #e9ecef;
+      }
+
+      .queue-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #dee2e6;
+      }
+
+      .queue-header h4 {
+        margin: 0;
+        color: #495057;
+        font-size: 1.1em;
+      }
+
+      .queue-header h4 i {
+        color: #6c757d;
+        margin-right: 8px;
+      }
+
+      #queueCount {
+        color: #6c757d;
+        font-weight: normal;
+        font-size: 0.9em;
+      }
+
+      .queue-controls {
+        display: flex;
+        gap: 10px;
+      }
+
+      .queue-control-btn {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.9em;
+        transition: all 0.2s ease;
+        background: #6c757d;
+        color: white;
+      }
+
+      .queue-control-btn:hover {
+        background: #5a6268;
+        transform: translateY(-1px);
+      }
+
+      .queue-control-btn i {
+        margin-right: 5px;
+      }
+
+      .file-queue-list {
+        max-height: 400px;
+        overflow-y: auto;
+        margin-bottom: 20px;
+      }
+
+      .queue-item {
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        transition: all 0.2s ease;
+      }
+
+      .queue-item:hover {
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      }
+
+      .queue-item-icon {
+        font-size: 2em;
+        width: 50px;
+        text-align: center;
+      }
+
+      .queue-item-info {
+        flex: 1;
+      }
+
+      .queue-item-name {
+        font-weight: 600;
+        color: #212529;
+        margin-bottom: 5px;
+      }
+
+      .queue-item-details {
+        font-size: 0.85em;
+        color: #6c757d;
+      }
+
+      .queue-item-status {
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 0.85em;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+
+      .status-waiting {
+        background: #fff3cd;
+        color: #856404;
+      }
+
+      .status-processing {
+        background: #cfe2ff;
+        color: #084298;
+        animation: pulse 1.5s infinite;
+      }
+
+      .status-completed {
+        background: #d1e7dd;
+        color: #0f5132;
+      }
+
+      .status-failed {
+        background: #f8d7da;
+        color: #842029;
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.6; }
+      }
+
+      .queue-item-progress {
+        width: 100%;
+        height: 4px;
+        background: #e9ecef;
+        border-radius: 2px;
+        overflow: hidden;
+        margin-top: 8px;
+      }
+
+      .queue-item-progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #4facfe, #00f2fe);
+        transition: width 0.3s ease;
+      }
+
+      .queue-item-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .queue-item-btn {
+        padding: 6px 12px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.85em;
+        transition: all 0.2s ease;
+      }
+
+      .btn-remove {
+        background: #dc3545;
+        color: white;
+      }
+
+      .btn-remove:hover {
+        background: #bb2d3b;
+      }
+
+      .btn-retry {
+        background: #0dcaf0;
+        color: white;
+      }
+
+      .btn-retry:hover {
+        background: #0bb5d7;
+      }
+
+      .queue-summary {
+        background: white;
+        border-radius: 8px;
+        padding: 15px;
+      }
+
+      .queue-stats {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+        margin-bottom: 15px;
+      }
+
+      .stat-item {
+        font-size: 0.9em;
+        color: #6c757d;
+      }
+
+      .stat-item i {
+        margin-right: 5px;
+      }
+
+      .queue-progress {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+      }
+
+      .progress-bar-container {
+        flex: 1;
+        height: 8px;
+        background: #e9ecef;
+        border-radius: 4px;
+        overflow: hidden;
+      }
+
+      .progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #4facfe, #00f2fe);
+        transition: width 0.3s ease;
+        border-radius: 4px;
+      }
+
       .empty-state {
         text-align: center;
         color: #999;
@@ -497,15 +724,43 @@
               onclick="document.getElementById('fileInput').click()"
             >
               <i class="fas fa-cloud-upload-alt"></i>
-              <h4>点击选择文件或拖拽到此处</h4>
-              <p>支持 .js 和 .json 文件</p>
+              <h4>点击选择文件（可多选）或拖拽到此处</h4>
+              <p>支持 .js 和 .json 文件，可同时上传多个文件</p>
               <input
                 type="file"
                 id="fileInput"
                 name="file"
                 accept=".js,.json"
+                multiple
               />
               <div class="file-info" id="fileInfo"></div>
+            </div>
+
+            <!-- 文件队列展示 -->
+            <div class="file-queue-section" id="fileQueueSection" style="display: none;">
+              <div class="queue-header">
+                <h4><i class="fas fa-tasks"></i> 文件队列 <span id="queueCount">(0)</span></h4>
+                <div class="queue-controls">
+                  <button type="button" class="queue-control-btn" id="clearQueueBtn" title="清空队列">
+                    <i class="fas fa-trash"></i> 清空
+                  </button>
+                </div>
+              </div>
+              <div class="file-queue-list" id="fileQueueList"></div>
+              <div class="queue-summary">
+                <div class="queue-stats">
+                  <span class="stat-item"><i class="fas fa-clock"></i> 等待: <span id="waitingCount">0</span></span>
+                  <span class="stat-item"><i class="fas fa-spinner"></i> 处理中: <span id="processingCount">0</span></span>
+                  <span class="stat-item"><i class="fas fa-check-circle"></i> 完成: <span id="completedCount">0</span></span>
+                  <span class="stat-item"><i class="fas fa-exclamation-circle"></i> 失败: <span id="failedCount">0</span></span>
+                </div>
+                <div class="queue-progress">
+                  <div class="progress-bar-container">
+                    <div class="progress-bar" id="queueProgressBar"></div>
+                  </div>
+                  <span class="progress-text" id="queueProgressText">0%</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -718,34 +973,182 @@
           fileUpload.classList.remove('dragover');
           const files = e.dataTransfer.files;
           if (files.length > 0) {
-              fileInput.files = files;
-              showFileInfo(files[0]);
+              handleFileSelection(files);
           }
       });
+
+      // 文件队列管理
+      let fileQueue = [];
+      let currentFileIndex = 0;
+      let isProcessing = false;
+      let isPaused = false;
 
       fileInput.addEventListener('change', (e) => {
           if (e.target.files.length > 0) {
-              showFileInfo(e.target.files[0]);
+              handleFileSelection(e.target.files);
           }
       });
 
-      function showFileInfo(file) {
+      function handleFileSelection(files) {
           const validTypes = ['.js', '.json'];
-          const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+          const newFiles = [];
 
-          if (validTypes.includes(fileExtension)) {
-              fileInfo.innerHTML = `
-                  <i class="fas fa-file-code"></i>
-                  <strong>${file.name}</strong> (${(file.size / 1024).toFixed(1)} KB)
-              `;
-              fileInfo.style.display = 'block';
+          Array.from(files).forEach(file => {
+              const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+              if (validTypes.includes(fileExtension)) {
+                  // 检查是否已存在同名文件
+                  if (!fileQueue.find(item => item.file.name === file.name)) {
+                      newFiles.push({
+                          id: Date.now() + Math.random(),
+                          file: file,
+                          status: 'waiting',  // waiting, processing, completed, failed
+                          progress: 0,
+                          error: null,
+                          result: null
+                      });
+                  }
+              } else {
+                  alert(`文件 "${file.name}" 不是有效的 .js 或 .json 文件`);
+              }
+          });
+
+          if (newFiles.length > 0) {
+              fileQueue.push(...newFiles);
+              updateFileQueueUI();
               updateSubmitButton();
-          } else {
-              alert('请选择 .js 或 .json 文件');
-              fileInput.value = '';
-              fileInfo.style.display = 'none';
           }
       }
+
+      function updateFileQueueUI() {
+          const queueSection = document.getElementById('fileQueueSection');
+          const queueList = document.getElementById('fileQueueList');
+          const queueCount = document.getElementById('queueCount');
+
+          if (fileQueue.length === 0) {
+              queueSection.style.display = 'none';
+              fileInfo.style.display = 'none';
+              return;
+          }
+
+          queueSection.style.display = 'block';
+          queueCount.textContent = `(${fileQueue.length})`;
+
+          // 更新文件列表
+          queueList.innerHTML = fileQueue.map((item, index) => {
+              const statusClass = `status-${item.status}`;
+              const statusText = {
+                  'waiting': '⏳ 等待中',
+                  'processing': '⚙️ 翻译中',
+                  'completed': '✓ 已完成',
+                  'failed': '✗ 失败'
+              }[item.status];
+
+              const icon = {
+                  'waiting': '<i class="fas fa-clock" style="color: #ffc107;"></i>',
+                  'processing': '<i class="fas fa-spinner fa-spin" style="color: #007bff;"></i>',
+                  'completed': '<i class="fas fa-check-circle" style="color: #28a745;"></i>',
+                  'failed': '<i class="fas fa-times-circle" style="color: #dc3545;"></i>'
+              }[item.status];
+
+              return `
+                  <div class="queue-item" data-id="${item.id}">
+                      <div class="queue-item-icon">${icon}</div>
+                      <div class="queue-item-info">
+                          <div class="queue-item-name">${item.file.name}</div>
+                          <div class="queue-item-details">
+                              ${(item.file.size / 1024).toFixed(1)} KB
+                              ${item.error ? ` • <span style="color: #dc3545;">${item.error}</span>` : ''}
+                          </div>
+                          ${item.status === 'processing' ? `
+                              <div class="queue-item-progress">
+                                  <div class="queue-item-progress-bar" style="width: ${item.progress}%"></div>
+                              </div>
+                          ` : ''}
+                      </div>
+                      <div class="queue-item-status ${statusClass}">${statusText}</div>
+                      <div class="queue-item-actions">
+                          ${item.status === 'failed' ? `
+                              <button class="queue-item-btn btn-retry" onclick="retryFile(${index})">
+                                  <i class="fas fa-redo"></i> 重试
+                              </button>
+                          ` : ''}
+                          ${item.status !== 'processing' ? `
+                              <button class="queue-item-btn btn-remove" onclick="removeFile(${index})">
+                                  <i class="fas fa-times"></i>
+                              </button>
+                          ` : ''}
+                      </div>
+                  </div>
+              `;
+          }).join('');
+
+          // 更新统计信息
+          updateQueueStats();
+
+          // 更新简单的文件信息显示
+          if (fileQueue.length === 1) {
+              fileInfo.innerHTML = `
+                  <i class="fas fa-file-code"></i>
+                  <strong>${fileQueue[0].file.name}</strong> (${(fileQueue[0].file.size / 1024).toFixed(1)} KB)
+              `;
+              fileInfo.style.display = 'block';
+          } else {
+              fileInfo.innerHTML = `
+                  <i class="fas fa-files"></i>
+                  已选择 <strong>${fileQueue.length}</strong> 个文件
+              `;
+              fileInfo.style.display = 'block';
+          }
+      }
+
+      function updateQueueStats() {
+          const waitingCount = fileQueue.filter(f => f.status === 'waiting').length;
+          const processingCount = fileQueue.filter(f => f.status === 'processing').length;
+          const completedCount = fileQueue.filter(f => f.status === 'completed').length;
+          const failedCount = fileQueue.filter(f => f.status === 'failed').length;
+
+          document.getElementById('waitingCount').textContent = waitingCount;
+          document.getElementById('processingCount').textContent = processingCount;
+          document.getElementById('completedCount').textContent = completedCount;
+          document.getElementById('failedCount').textContent = failedCount;
+
+          // 更新总体进度
+          const totalProgress = fileQueue.length > 0
+              ? (completedCount / fileQueue.length) * 100
+              : 0;
+          document.getElementById('queueProgressBar').style.width = totalProgress + '%';
+          document.getElementById('queueProgressText').textContent = Math.round(totalProgress) + '%';
+      }
+
+      function removeFile(index) {
+          fileQueue.splice(index, 1);
+          updateFileQueueUI();
+          updateSubmitButton();
+      }
+
+      function retryFile(index) {
+          fileQueue[index].status = 'waiting';
+          fileQueue[index].error = null;
+          fileQueue[index].progress = 0;
+          updateFileQueueUI();
+      }
+
+      function clearQueue() {
+          if (isProcessing) {
+              if (!confirm('队列正在处理中，确定要清空吗？')) {
+                  return;
+              }
+              isPaused = true;
+          }
+          fileQueue = [];
+          currentFileIndex = 0;
+          isProcessing = false;
+          updateFileQueueUI();
+          updateSubmitButton();
+      }
+
+      // 清空队列按钮
+      document.getElementById('clearQueueBtn').addEventListener('click', clearQueue);
 
       // 语言搜索功能
       const searchInput = document.getElementById('languageSearch');
@@ -887,11 +1290,20 @@
       function updateSubmitButton() {
           const submitBtn = document.getElementById('submitBtn');
           const estimateBtn = document.getElementById('estimateBtn');
-          const hasFile = fileInput.files.length > 0;
+          const hasFile = fileQueue.length > 0;
           const hasLanguages = selectedLanguages.size > 0;
 
-          submitBtn.disabled = !(hasFile && hasLanguages);
-          
+          submitBtn.disabled = !(hasFile && hasLanguages) || isProcessing;
+
+          // 更新按钮文字
+          if (isProcessing) {
+              submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 处理队列中...';
+          } else if (fileQueue.length > 1) {
+              submitBtn.innerHTML = `<i class="fas fa-magic"></i> 开始批量翻译 (${fileQueue.length} 个文件)`;
+          } else {
+              submitBtn.innerHTML = '<i class="fas fa-magic"></i> 开始翻译';
+          }
+
           // 显示/隐藏费用预估按钮
           const selectedEngine = document.querySelector('input[name="translation_engine"]:checked')?.value;
           if (hasFile && hasLanguages && selectedEngine === 'claude') {
@@ -902,8 +1314,8 @@
           }
       }
 
-      // 表单提交处理
-      document.getElementById('translateForm').addEventListener('submit', (e) => {
+      // 表单提交处理 - 支持队列
+      document.getElementById('translateForm').addEventListener('submit', async (e) => {
           e.preventDefault();
 
           if (selectedLanguages.size === 0) {
@@ -911,48 +1323,134 @@
               return;
           }
 
-          // 准备表单数据
-          const formData = new FormData();
-          formData.append('file', fileInput.files[0]);
-
-          // 添加选中的语言
-          selectedLanguages.forEach(code => {
-              formData.append('languages', code);
-          });
-
-          // 添加翻译引擎选择
-          const selectedEngine = document.querySelector('input[name="translation_engine"]:checked').value;
-          formData.append('translation_engine', selectedEngine);
-          
-          // 如果选择了 Claude，添加模型选择
-          if (selectedEngine === 'claude') {
-              const claudeModel = document.getElementById('claudeModel').value;
-              formData.append('claude_model', claudeModel);
+          if (fileQueue.length === 0) {
+              alert('请至少选择一个文件');
+              return;
           }
 
-          // 禁用提交按钮
-          const submitBtn = document.getElementById('submitBtn');
-          submitBtn.disabled = true;
-          submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 翻译中...';
+          // 开始处理队列
+          isProcessing = true;
+          isPaused = false;
+          currentFileIndex = 0;
+          updateSubmitButton();
 
-          // 使用AJAX提交
-          fetch('/translate', {
-              method: 'POST',
-              body: formData
-          })
-          .then(response => {
-              if (!response.ok) {
-                  throw new Error('翻译请求失败');
-              }
-              // 响应处理由Socket.IO的progress事件处理
-          })
-          .catch(error => {
-              console.error('Error:', error);
-              alert('翻译过程中出现错误，请重试');
-              submitBtn.disabled = false;
-              submitBtn.innerHTML = '<i class="fas fa-magic"></i> 开始翻译';
-          });
+          await processQueue();
+
+          // 全部完成
+          isProcessing = false;
+          updateSubmitButton();
+
+          const completedCount = fileQueue.filter(f => f.status === 'completed').length;
+          const failedCount = fileQueue.filter(f => f.status === 'failed').length;
+
+          if (failedCount === 0) {
+              alert(`🎉 批量翻译完成！\n成功: ${completedCount} 个文件`);
+          } else {
+              alert(`翻译完成\n成功: ${completedCount} 个文件\n失败: ${failedCount} 个文件\n\n请查看队列中的失败项并重试。`);
+          }
       });
+
+      // 队列处理核心函数
+      async function processQueue() {
+          for (let i = 0; i < fileQueue.length; i++) {
+              if (isPaused) {
+                  console.log('队列已暂停');
+                  break;
+              }
+
+              const fileItem = fileQueue[i];
+
+              // 跳过已完成的文件
+              if (fileItem.status === 'completed') {
+                  continue;
+              }
+
+              // 标记为处理中
+              fileItem.status = 'processing';
+              fileItem.progress = 0;
+              currentFileIndex = i;
+              updateFileQueueUI();
+
+              try {
+                  await translateFile(fileItem);
+                  fileItem.status = 'completed';
+                  fileItem.progress = 100;
+              } catch (error) {
+                  console.error(`文件 ${fileItem.file.name} 翻译失败:`, error);
+                  fileItem.status = 'failed';
+                  fileItem.error = error.message || '翻译失败';
+                  fileItem.progress = 0;
+              }
+
+              updateFileQueueUI();
+
+              // 短暂延迟，避免请求过快
+              if (i < fileQueue.length - 1) {
+                  await new Promise(resolve => setTimeout(resolve, 500));
+              }
+          }
+      }
+
+      // 翻译单个文件
+      async function translateFile(fileItem) {
+          return new Promise((resolve, reject) => {
+              const formData = new FormData();
+              formData.append('file', fileItem.file);
+
+              // 添加选中的语言
+              selectedLanguages.forEach(code => {
+                  formData.append('languages', code);
+              });
+
+              // 添加翻译引擎选择
+              const selectedEngine = document.querySelector('input[name="translation_engine"]:checked').value;
+              formData.append('translation_engine', selectedEngine);
+
+              // 如果选择了 Claude，添加模型选择
+              if (selectedEngine === 'claude') {
+                  const claudeModel = document.getElementById('claudeModel').value;
+                  formData.append('claude_model', claudeModel);
+              }
+
+              // 监听这个文件的进度更新
+              const progressHandler = (data) => {
+                  fileItem.progress = data.progress || 0;
+                  updateFileQueueUI();
+              };
+
+              socket.on('progress', progressHandler);
+
+              // 使用AJAX提交
+              fetch('/translate', {
+                  method: 'POST',
+                  body: formData
+              })
+              .then(response => {
+                  if (!response.ok) {
+                      throw new Error('翻译请求失败');
+                  }
+                  // 等待完成信号
+                  const checkComplete = setInterval(() => {
+                      if (fileItem.progress >= 100) {
+                          clearInterval(checkComplete);
+                          socket.off('progress', progressHandler);
+                          resolve();
+                      }
+                  }, 500);
+
+                  // 超时保护 (10分钟)
+                  setTimeout(() => {
+                      clearInterval(checkComplete);
+                      socket.off('progress', progressHandler);
+                      reject(new Error('翻译超时'));
+                  }, 600000);
+              })
+              .catch(error => {
+                  socket.off('progress', progressHandler);
+                  reject(error);
+              });
+          });
+      }
 
       // 翻译引擎选择函数
       function selectEngine(element, engine) {
