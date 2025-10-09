@@ -1023,6 +1023,11 @@
           }
       });
 
+      // 生成文件唯一标识（基于文件名、大小、修改时间）
+      function getFileId(file) {
+          return `${file.name}_${file.size}_${file.lastModified}`;
+      }
+
       function handleFileSelection(files) {
           const validTypes = ['.js', '.json'];
           const newFiles = [];
@@ -1030,8 +1035,8 @@
           Array.from(files).forEach(file => {
               const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
               if (validTypes.includes(fileExtension)) {
-                  // 检查是否已存在同名文件
-                  if (!fileQueue.find(item => item.file.name === file.name)) {
+                  // 检查是否已存在相同文件（基于文件名、大小、修改时间）
+                  if (!fileQueue.find(item => getFileId(item.file) === getFileId(file))) {
                       newFiles.push({
                           id: Date.now() + Math.random(),
                           file: file,
@@ -1040,6 +1045,8 @@
                           error: null,
                           result: null
                       });
+                  } else {
+                      console.log(`文件 "${file.name}" 已在队列中，跳过`);
                   }
               } else {
                   alert(`文件 "${file.name}" 不是有效的 .js 或 .json 文件`);
