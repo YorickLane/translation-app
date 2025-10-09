@@ -8,6 +8,8 @@ from flask import Flask, request, render_template, send_from_directory, flash, r
 import logging
 from werkzeug.utils import secure_filename
 import os
+import uuid
+import shutil
 from functools import lru_cache
 from google.cloud import translate_v2 as translate
 import datetime
@@ -105,10 +107,23 @@ def translate_file_route():
             flash("Invalid file type")
             return redirect("/")
 
-        filename = secure_filename(file.filename)
-        saved_file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        # 生成唯一的文件名，避免同名文件覆盖
+        original_filename = secure_filename(file.filename)
+        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        unique_id = uuid.uuid4().hex[:8]
+        base_name = os.path.splitext(original_filename)[0]
+        file_extension = os.path.splitext(original_filename)[1]
+        unique_filename = f"{base_name}_{timestamp}_{unique_id}{file_extension}"
+
+        # 保存上传文件
+        saved_file_path = os.path.join(app.config["UPLOAD_FOLDER"], unique_filename)
         file.save(saved_file_path)
         print(f"File saved to: {saved_file_path}")
+
+        # 创建独立的输出目录
+        output_dir = os.path.join(OUTPUT_FOLDER, f"{base_name}_{timestamp}_{unique_id}")
+        os.makedirs(output_dir, exist_ok=True)
+        print(f"Output directory created: {output_dir}")
 
         # Get target languages
         target_languages = request.form.getlist("languages")
@@ -119,7 +134,7 @@ def translate_file_route():
 
         # Get translation engine from form or use default
         translation_engine = request.form.get("translation_engine", TRANSLATION_ENGINE)
-        
+
         # Get Claude model if using Claude
         claude_model = request.form.get("claude_model", config.CLAUDE_MODEL)
 
@@ -162,14 +177,14 @@ def translate_file_route():
                 if translation_engine == "claude":
                     # Use Claude API for translation with selected model
                     output_file_name = translate_json_file_claude(
-                        saved_file_path, target_language, progress_callback, claude_model
+                        saved_file_path, target_language, progress_callback, claude_model, output_dir
                     )
                 else:
                     # Use Google Translate API
                     output_file_name = translate_file(
-                        saved_file_path, target_language, progress_callback
+                        saved_file_path, target_language, progress_callback, output_dir
                     )
-                output_files.append(os.path.join(OUTPUT_FOLDER, output_file_name))
+                output_files.append(os.path.join(output_dir, output_file_name))
                 print(
                     f"Translation to {target_language} completed. Output file: {output_file_name}"
                 )
@@ -214,15 +229,36 @@ def translate_file_route():
                     return redirect("/")
 
         # Create a ZIP archive from translated files
-        zip_name = f"translations_{filename}.zip"
+        zip_name = f"translations_{base_name}_{timestamp}_{unique_id}.zip"
+        zip_path_temp = os.path.join(output_dir, zip_name)
+        create_zip(output_files, zip_path_temp)
+        print(f"ZIP file created at: {zip_path_temp}")
+
+        # Move ZIP to main output folder
         zip_path = os.path.join(OUTPUT_FOLDER, zip_name)
-        create_zip(output_files, zip_path)
-        print(f"ZIP file created at: {zip_path}")
+        shutil.move(zip_path_temp, zip_path)
+        print(f"ZIP moved to: {zip_path}")
 
         # Remove individual files after adding to ZIP
         for output_file in output_files:
             if os.path.exists(output_file):
                 os.remove(output_file)
+
+        # Remove temporary output directory
+        if os.path.exists(output_dir) and os.path.isdir(output_dir):
+            try:
+                shutil.rmtree(output_dir)
+                print(f"Cleaned up temporary directory: {output_dir}")
+            except Exception as e:
+                print(f"Warning: Could not remove temporary directory: {e}")
+
+        # Remove uploaded temporary file
+        if os.path.exists(saved_file_path):
+            try:
+                os.remove(saved_file_path)
+                print(f"Cleaned up uploaded file: {saved_file_path}")
+            except Exception as e:
+                print(f"Warning: Could not remove uploaded file: {e}")
 
         # 发送完成信号
         socketio.emit(

@@ -207,8 +207,16 @@ Output the translated JSON only, without any explanation. Remember: translate to
         raise
 
 
-def translate_json_file_claude(source_file_path, target_language="en", progress_callback=None, model=None):
-    """使用Claude翻译JSON文件"""
+def translate_json_file_claude(source_file_path, target_language="en", progress_callback=None, model=None, output_dir="output"):
+    """使用Claude翻译JSON文件
+
+    Args:
+        source_file_path: 源文件路径
+        target_language: 目标语言代码
+        progress_callback: 进度回调函数
+        model: Claude 模型 ID
+        output_dir: 输出目录（默认为 "output"）
+    """
     # 使用传入的模型或默认模型
     selected_model = model or CLAUDE_MODEL
     logger.info(f"开始使用Claude翻译JSON文件到 {target_language}，使用模型: {selected_model}")
@@ -275,18 +283,21 @@ def translate_json_file_claude(source_file_path, target_language="en", progress_
 
     # 保存结果
     output_file_name = f"{target_language}.json"
-    output_path = os.path.join("output", output_file_name)
+    output_path = os.path.join(output_dir, output_file_name)
+
+    # 确保输出目录存在
+    os.makedirs(output_dir, exist_ok=True)
 
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(translated_data, f, ensure_ascii=False, indent=2)
 
     logger.info(f"翻译完成: {output_file_name}")
     print(f"[Claude API] 翻译完成，使用的模型: {selected_model}")
-    
+
     # 发送完成消息，包含使用的模型信息
     if progress_callback:
         progress_callback(100, f"翻译完成 (模型: {selected_model})")
-    
+
     return output_file_name
 
 

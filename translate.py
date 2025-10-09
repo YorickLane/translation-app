@@ -148,8 +148,15 @@ def translate_text(text, target_language="en"):
     return translated_text.replace(newline_placeholder, "\n")
 
 
-def translate_json_file(source_file_path, target_language="en", progress_callback=None):
-    """翻译JSON文件，支持嵌套结构和批量处理"""
+def translate_json_file(source_file_path, target_language="en", progress_callback=None, output_dir="output"):
+    """翻译JSON文件，支持嵌套结构和批量处理
+
+    Args:
+        source_file_path: 源文件路径
+        target_language: 目标语言代码
+        progress_callback: 进度回调函数
+        output_dir: 输出目录（默认为 "output"）
+    """
     logger.info(f"开始翻译JSON文件到 {target_language}")
 
     with open(source_file_path, "r", encoding="utf-8") as f:
@@ -192,7 +199,10 @@ def translate_json_file(source_file_path, target_language="en", progress_callbac
             #     time.sleep(1)
 
         output_file_name = f"{target_language}.json"
-        output_path = os.path.join("output", output_file_name)
+        output_path = os.path.join(output_dir, output_file_name)
+
+        # 确保输出目录存在
+        os.makedirs(output_dir, exist_ok=True)
 
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(translated_data, f, ensure_ascii=False, indent=2)
@@ -206,7 +216,7 @@ def translate_json_file(source_file_path, target_language="en", progress_callbac
 
 
 def translate_locale_file(
-    source_file_path, target_language="en", progress_callback=None
+    source_file_path, target_language="en", progress_callback=None, output_dir="output"
 ):
     """翻译JavaScript语言文件"""
     logger.info(f"开始翻译JS文件到 {target_language}")
@@ -263,7 +273,10 @@ def translate_locale_file(
     translated_content.append("};\n")
 
     output_file_name = f"{target_language}.js"
-    output_path = os.path.join("output", output_file_name)
+    output_path = os.path.join(output_dir, output_file_name)
+
+    # 确保输出目录存在
+    os.makedirs(output_dir, exist_ok=True)
 
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("".join(translated_content))
@@ -289,8 +302,15 @@ def create_zip(files, output_filename):
         raise
 
 
-def translate_file(source_file_path, target_language="en", progress_callback=None):
-    """根据文件类型调用相应的翻译函数"""
+def translate_file(source_file_path, target_language="en", progress_callback=None, output_dir="output"):
+    """根据文件类型调用相应的翻译函数
+
+    Args:
+        source_file_path: 源文件路径
+        target_language: 目标语言代码
+        progress_callback: 进度回调函数
+        output_dir: 输出目录（默认为 "output"）
+    """
     logger.info(f"开始翻译文件: {source_file_path} -> {target_language}")
 
     file_extension = source_file_path.split(".")[-1].lower()
@@ -298,11 +318,11 @@ def translate_file(source_file_path, target_language="en", progress_callback=Non
     try:
         if file_extension == "json":
             return translate_json_file(
-                source_file_path, target_language, progress_callback
+                source_file_path, target_language, progress_callback, output_dir
             )
         elif file_extension == "js":
             return translate_locale_file(
-                source_file_path, target_language, progress_callback
+                source_file_path, target_language, progress_callback, output_dir
             )
         else:
             raise ValueError(f"不支持的文件类型: {file_extension}")
