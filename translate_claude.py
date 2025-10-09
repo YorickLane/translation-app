@@ -51,6 +51,46 @@ LANGUAGE_NAMES = {
 }
 
 
+def clean_json_response(response_text):
+    """清理和修复 Claude 返回的 JSON 响应
+
+    处理常见的 JSON 格式问题：
+    - 移除 markdown 代码块标记
+    - 移除单行和多行注释
+    - 清理多余的空白字符
+    - 尝试修复常见的格式错误
+    """
+    import re
+
+    # 保存原始响应用于日志
+    original_text = response_text
+
+    # 1. 移除 markdown 代码块
+    if response_text.startswith("```"):
+        lines = response_text.split("\n")
+        # 移除第一行（```json 或 ```）和最后一行（```）
+        if len(lines) > 2:
+            response_text = "\n".join(lines[1:-1])
+
+    # 2. 移除单行注释 // ...
+    response_text = re.sub(r'//.*?$', '', response_text, flags=re.MULTILINE)
+
+    # 3. 移除多行注释 /* ... */
+    response_text = re.sub(r'/\*.*?\*/', '', response_text, flags=re.DOTALL)
+
+    # 4. 清理多余的空白字符（保留字符串内的空白）
+    # 这个比较复杂，暂时只清理行尾空白
+    response_text = re.sub(r'[ \t]+$', '', response_text, flags=re.MULTILINE)
+
+    # 5. 移除 BOM (Byte Order Mark)
+    response_text = response_text.lstrip('\ufeff')
+
+    # 6. 确保文本前后没有多余空白
+    response_text = response_text.strip()
+
+    return response_text
+
+
 def _contains_too_much_english(translations):
     """检测翻译结果中是否包含过多英文"""
     import re
@@ -147,7 +187,7 @@ def translate_with_claude(texts, target_language="en", model=None):
     specific_rules = capitalization_rules.get(target_language, 
         "- Follow the standard capitalization rules for this language\n- Be consistent throughout the translation")
 
-    prompt = f"""Please translate the following JSON content to {target_lang_name}. 
+    prompt = f"""Please translate the following JSON content to {target_lang_name}.
 
 CRITICAL REQUIREMENTS:
 1. Keep the JSON structure exactly the same, only translate the values (not the keys)
@@ -158,10 +198,18 @@ CRITICAL REQUIREMENTS:
 CAPITALIZATION RULES for {target_lang_name}:
 {specific_rules}
 
+JSON OUTPUT REQUIREMENTS:
+- Output ONLY valid JSON, no additional text or explanation
+- Do NOT add comments (// or /* */)
+- Do NOT wrap in markdown code blocks (```json)
+- Ensure all strings are properly escaped
+- Use double quotes for all strings (not single quotes)
+- Do NOT add trailing commas
+
 Input JSON:
 {json_input}
 
-Output the translated JSON only, without any explanation. Remember: translate to {target_lang_name}, NOT English!"""
+Output the translated JSON only. Remember: translate to {target_lang_name}, NOT English!"""
 
     try:
         # 调用Claude API
@@ -181,26 +229,41 @@ Output the translated JSON only, without any explanation. Remember: translate to
         logger.info(f"[Claude API] 成功收到响应，模型: {selected_model}")
 
         # 解析响应
-        translated_json = response.content[0].text.strip()
+        raw_response = response.content[0].text.strip()
 
         # 尝试解析JSON
         try:
-            translated_data = json.loads(translated_json)
-            
+            translated_data = json.loads(raw_response)
+
             # 应用后处理
             if USE_ADVANCED_CONFIG:
                 translated_data = post_process_translation(translated_data, target_language)
-            
+
             return translated_data
-        except json.JSONDecodeError:
-            # 如果解析失败，尝试清理响应
-            # 移除可能的markdown代码块标记
-            if translated_json.startswith("```"):
-                lines = translated_json.split("\n")
-                translated_json = "\n".join(lines[1:-1])
-                translated_data = json.loads(translated_json)
+
+        except json.JSONDecodeError as e:
+            # JSON 解析失败，尝试清理响应
+            logger.warning(f"初始 JSON 解析失败，尝试清理响应...")
+            logger.debug(f"原始响应前200字符: {raw_response[:200]}")
+
+            try:
+                cleaned_response = clean_json_response(raw_response)
+                translated_data = json.loads(cleaned_response)
+
+                logger.info("清理后的响应解析成功")
+
+                # 应用后处理
+                if USE_ADVANCED_CONFIG:
+                    translated_data = post_process_translation(translated_data, target_language)
+
                 return translated_data
-            raise
+
+            except json.JSONDecodeError as clean_error:
+                # 清理后仍然失败，记录详细错误
+                logger.error(f"清理后仍无法解析 JSON: {clean_error}")
+                logger.error(f"清理后的响应前500字符: {cleaned_response[:500]}")
+                logger.error(f"JSON 错误位置: 行 {clean_error.lineno}, 列 {clean_error.colno}")
+                raise Exception(f"JSON 解析失败: {clean_error}")
 
     except Exception as e:
         logger.error(f"Claude API错误: {e}")
@@ -231,6 +294,7 @@ def translate_json_file_claude(source_file_path, target_language="en", progress_
     # 分批处理
     items = list(data.items())
     translated_data = {}
+    failed_batches = []  # 记录失败的批次
 
     for i in range(0, total_items, BATCH_SIZE):
         batch_items = dict(items[i : i + BATCH_SIZE])
@@ -279,7 +343,19 @@ def translate_json_file_claude(source_file_path, target_language="en", progress_
                     if retry_count == max_retries:
                         # 最终失败，保留原文
                         logger.error(f"批次 {batch_num} 多次重试失败，保留原文")
+                        failed_batches.append({
+                            'batch_num': batch_num,
+                            'error': str(e),
+                            'item_count': len(batch_items)
+                        })
                         translated_data.update(batch_items)
+
+                        # 通知前端
+                        if progress_callback:
+                            progress_callback(
+                                (i / total_items) * 100,
+                                f"⚠️ 批次 {batch_num}/{total_batches} 翻译失败，已保留原文"
+                            )
 
     # 保存结果
     output_file_name = f"{target_language}.json"
@@ -294,9 +370,23 @@ def translate_json_file_claude(source_file_path, target_language="en", progress_
     logger.info(f"翻译完成: {output_file_name}")
     print(f"[Claude API] 翻译完成，使用的模型: {selected_model}")
 
-    # 发送完成消息，包含使用的模型信息
-    if progress_callback:
-        progress_callback(100, f"翻译完成 (模型: {selected_model})")
+    # 汇总失败信息
+    if failed_batches:
+        total_failed_items = sum(batch['item_count'] for batch in failed_batches)
+        failure_summary = f"⚠️ {len(failed_batches)} 个批次失败（共 {total_failed_items} 项保留原文）"
+        logger.warning(failure_summary)
+        logger.warning(f"失败批次详情: {[b['batch_num'] for b in failed_batches]}")
+
+        # 发送完成消息，包含失败信息
+        if progress_callback:
+            progress_callback(
+                100,
+                f"翻译完成 (模型: {selected_model}) - {failure_summary}"
+            )
+    else:
+        # 发送完成消息，无失败
+        if progress_callback:
+            progress_callback(100, f"✅ 翻译完成 (模型: {selected_model})")
 
     return output_file_name
 
