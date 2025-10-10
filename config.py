@@ -71,7 +71,7 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 ALLOWED_EXTENSIONS = {"json", "js"}
 
 # 批处理配置（可被 translation_config.py 覆盖）
-BATCH_SIZE = 5  # 每批处理的项目数（减小以提高成功率）
+BATCH_SIZE = 3  # 每批处理的项目数（减小以避免长内容被截断）
 REQUEST_DELAY = 1.0  # 请求间隔（秒，增加以避免速率限制）
 MAX_RETRIES = 3  # 最大重试次数
 

@@ -18,6 +18,7 @@ from time import sleep
 from config import SECRET_KEY, TRANSLATION_ENGINE
 import config
 from google.auth.exceptions import RefreshError
+import eventlet
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY

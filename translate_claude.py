@@ -222,7 +222,7 @@ Output the translated JSON only. Remember: translate to {target_lang_name}, NOT 
         
         response = client.messages.create(
             model=selected_model,  # 使用选定的模型
-            max_tokens=4096,
+            max_tokens=8192,  # 增加到8192以避免长翻译被截断
             temperature=temperature,  # 使用语言特定的温度
             messages=[{"role": "user", "content": prompt}],
         )
