@@ -178,11 +178,11 @@ def translate_file_route():
                 if translation_engine == "claude":
                     # Use Claude API for translation with selected model
                     # 根据文件类型选择相应的翻译函数
-                    if file_extension == "json":
+                    if file_extension == ".json":
                         output_file_name = translate_json_file_claude(
                             saved_file_path, target_language, progress_callback, claude_model, output_dir
                         )
-                    elif file_extension == "js":
+                    elif file_extension == ".js":
                         output_file_name = translate_js_file_claude(
                             saved_file_path, target_language, progress_callback, claude_model, output_dir
                         )
