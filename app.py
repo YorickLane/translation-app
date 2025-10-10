@@ -1,7 +1,7 @@
 # app.py
 
 from translate import translate_text, translate_file, create_zip
-from translate_claude import translate_json_file_claude
+from translate_claude import translate_json_file_claude, translate_js_file_claude
 from claude_models import get_claude_models
 from claude_token_counter import count_tokens_for_translation, count_tokens_with_api, format_cost_summary
 from flask import Flask, request, render_template, send_from_directory, flash, redirect, jsonify
@@ -177,9 +177,17 @@ def translate_file_route():
 
                 if translation_engine == "claude":
                     # Use Claude API for translation with selected model
-                    output_file_name = translate_json_file_claude(
-                        saved_file_path, target_language, progress_callback, claude_model, output_dir
-                    )
+                    # 根据文件类型选择相应的翻译函数
+                    if file_extension == "json":
+                        output_file_name = translate_json_file_claude(
+                            saved_file_path, target_language, progress_callback, claude_model, output_dir
+                        )
+                    elif file_extension == "js":
+                        output_file_name = translate_js_file_claude(
+                            saved_file_path, target_language, progress_callback, claude_model, output_dir
+                        )
+                    else:
+                        raise ValueError(f"不支持的文件类型: {file_extension}")
                 else:
                     # Use Google Translate API
                     output_file_name = translate_file(
@@ -203,37 +211,44 @@ def translate_file_route():
             except Exception as e:
                 error_msg = str(e)
                 print(f"Translation failed for {target_language}: {error_msg}")
+                logger.error(f"Translation failed for {target_language}: {error_msg}")
 
                 # 发送错误信息
                 socketio.emit(
                     "progress",
                     {
                         "progress": (index + 1) / total_languages * 100,
-                        "error": f"{target_language} 翻译失败: {error_msg}",
+                        "error": f"⚠️ {target_language} 翻译失败: {error_msg}，继续处理其他语言...",
                     },
                     namespace="/test",
                 )
 
-                # 如果是速率限制错误，建议用户稍后重试
+                # 记录错误但继续处理其他语言（不要中断整个流程）
+                # 如果是速率限制或配额错误，记录警告但继续
                 if "速率限制" in error_msg or "Rate Limit" in error_msg:
-                    flash(
-                        f"翻译失败：API速率限制。请等待几分钟后重试，或考虑减少同时翻译的语言数量。"
-                    )
-                    return redirect("/")
+                    logger.warning(f"{target_language}: API速率限制，跳过此语言继续处理")
                 elif "配额" in error_msg or "quota" in error_msg:
-                    flash(
-                        f"翻译失败：API配额已用完。请检查Google Cloud配额设置或稍后重试。"
-                    )
-                    return redirect("/")
-                else:
-                    flash(f"翻译到 {target_language} 时发生错误: {error_msg}")
-                    return redirect("/")
+                    logger.warning(f"{target_language}: API配额问题，跳过此语言继续处理")
 
-        # Create a ZIP archive from translated files
+                # 继续处理下一个语言，而不是中断整个流程
+                continue
+
+        # Create a ZIP archive from translated files (only if we have successful translations)
+        if not output_files:
+            # 所有语言翻译都失败了
+            flash("所有语言翻译都失败了，请检查错误信息并重试")
+            return redirect("/")
+
         zip_name = f"translations_{base_name}_{timestamp}_{unique_id}.zip"
         zip_path_temp = os.path.join(output_dir, zip_name)
         create_zip(output_files, zip_path_temp)
         print(f"ZIP file created at: {zip_path_temp}")
+
+        # 如果有部分语言失败，通知用户
+        successful_count = len(output_files)
+        if successful_count < total_languages:
+            failed_count = total_languages - successful_count
+            logger.info(f"翻译完成：{successful_count} 个成功，{failed_count} 个失败")
 
         # Move ZIP to main output folder
         zip_path = os.path.join(OUTPUT_FOLDER, zip_name)

@@ -8,6 +8,7 @@ import os
 import json
 import time
 import logging
+import re
 from anthropic import Anthropic
 from config import CLAUDE_API_KEY, CLAUDE_MODEL, BATCH_SIZE, REQUEST_DELAY, MAX_RETRIES
 try:
@@ -385,6 +386,142 @@ def translate_json_file_claude(source_file_path, target_language="en", progress_
             )
     else:
         # 发送完成消息，无失败
+        if progress_callback:
+            progress_callback(100, f"✅ 翻译完成 (模型: {selected_model})")
+
+    return output_file_name
+
+
+def translate_js_file_claude(source_file_path, target_language="en", progress_callback=None, model=None, output_dir="output"):
+    """使用 Claude 翻译 JavaScript 语言文件
+
+    Args:
+        source_file_path: 源文件路径
+        target_language: 目标语言代码
+        progress_callback: 进度回调函数
+        model: Claude 模型 ID
+        output_dir: 输出目录（默认为 "output"）
+    """
+    # 使用传入的模型或默认模型
+    selected_model = model or CLAUDE_MODEL
+    logger.info(f"开始使用 Claude 翻译 JS 文件到 {target_language}，使用模型: {selected_model}")
+    print(f"[Claude API] 正在使用模型: {selected_model}")
+
+    # 读取 JS 文件内容
+    with open(source_file_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    logger.info(f"文件内容预览: {content[:200]}...")
+
+    # 解析 JS 文件中的键值对
+    key_value_pairs = re.findall(
+        r'(\'[^\']+\'|[^\s:]+):\s*(`.*?`|".*?"|\'.*?\')', content, re.DOTALL
+    )
+
+    if not key_value_pairs:
+        raise ValueError("无法从 JS 文件中提取键值对，请检查文件格式")
+
+    logger.info(f"找到 {len(key_value_pairs)} 个键值对")
+
+    # 构建用于翻译的字典
+    translation_dict = {}
+    for key, value in key_value_pairs:
+        clean_key = key.strip("'")
+        clean_value = value.strip().strip("`\"'")
+        if clean_value.strip():  # 只处理非空值
+            translation_dict[clean_key] = clean_value
+
+    total_items = len(translation_dict)
+    logger.info(f"准备翻译 {total_items} 个项目")
+
+    # 分批翻译（使用与 JSON 相同的批处理逻辑）
+    items = list(translation_dict.items())
+    translated_data = {}
+    failed_batches = []
+
+    for i in range(0, total_items, BATCH_SIZE):
+        batch_items = dict(items[i : i + BATCH_SIZE])
+        batch_num = i // BATCH_SIZE + 1
+        total_batches = (total_items + BATCH_SIZE - 1) // BATCH_SIZE
+
+        logger.info(f"翻译批次 {batch_num}/{total_batches}")
+
+        # 发送进度更新
+        if progress_callback:
+            progress = (i / total_items) * 100
+            progress_callback(progress, f"正在翻译 JS 文件: 批次 {batch_num}/{total_batches}")
+
+        # 使用 Claude API 翻译批次
+        max_retries = MAX_RETRIES
+        retry_count = 0
+
+        while retry_count <= max_retries:
+            try:
+                translated_batch = translate_with_claude(
+                    batch_items, target_language, selected_model
+                )
+                translated_data.update(translated_batch)
+                break
+
+            except Exception as e:
+                logger.error(f"批次 {batch_num} 翻译失败: {e}")
+
+                if retry_count < max_retries:
+                    retry_count += 1
+                    logger.info(f"重试批次 {batch_num} (尝试 {retry_count}/{max_retries})")
+                    time.sleep(REQUEST_DELAY * 2)
+                else:
+                    # 最终失败，保留原文
+                    logger.error(f"批次 {batch_num} 多次重试失败，保留原文")
+                    failed_batches.append({
+                        'batch_num': batch_num,
+                        'error': str(e),
+                        'item_count': len(batch_items)
+                    })
+                    translated_data.update(batch_items)
+
+                    # 通知前端
+                    if progress_callback:
+                        progress_callback(
+                            (i / total_items) * 100,
+                            f"⚠️ 批次 {batch_num}/{total_batches} 翻译失败，已保留原文"
+                        )
+
+        # 批次间延迟
+        if i + BATCH_SIZE < total_items:
+            time.sleep(REQUEST_DELAY)
+
+    # 构建输出的 JS 文件内容
+    translated_content = ["export default {\n"]
+    for key, value in translated_data.items():
+        # 转义引号
+        escaped_value = value.replace('"', '\\"')
+        translated_content.append(f'  "{key}": "{escaped_value}",\n')
+    translated_content.append("};\n")
+
+    # 保存结果
+    output_file_name = f"{target_language}.js"
+    output_path = os.path.join(output_dir, output_file_name)
+
+    # 确保输出目录存在
+    os.makedirs(output_dir, exist_ok=True)
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write("".join(translated_content))
+
+    logger.info(f"JS 翻译完成: {output_file_name}")
+    print(f"[Claude API] JS 翻译完成，使用的模型: {selected_model}")
+
+    # 汇总失败信息
+    if failed_batches:
+        total_failed_items = sum(batch['item_count'] for batch in failed_batches)
+        failure_summary = f"⚠️ {len(failed_batches)} 个批次失败（共 {total_failed_items} 项保留原文）"
+        logger.warning(failure_summary)
+        logger.warning(f"失败批次详情: {[b['batch_num'] for b in failed_batches]}")
+
+        if progress_callback:
+            progress_callback(100, f"翻译完成 (模型: {selected_model}) - {failure_summary}")
+    else:
         if progress_callback:
             progress_callback(100, f"✅ 翻译完成 (模型: {selected_model})")
 
