@@ -159,6 +159,9 @@ def translate_json_file(source_file_path, target_language="en", progress_callbac
     """
     logger.info(f"开始翻译JSON文件到 {target_language}")
 
+    # 提取源文件基础名称（不含扩展名）
+    source_base_name = os.path.splitext(os.path.basename(source_file_path))[0]
+
     with open(source_file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
@@ -198,7 +201,8 @@ def translate_json_file(source_file_path, target_language="en", progress_callbac
             #     logger.info(f"已处理 {i} 项，休息片刻...")
             #     time.sleep(1)
 
-        output_file_name = f"{target_language}.json"
+        # 输出文件名包含源文件名，避免多文件翻译时的命名冲突
+        output_file_name = f"{source_base_name}_{target_language}.json"
         output_path = os.path.join(output_dir, output_file_name)
 
         # 确保输出目录存在
@@ -220,6 +224,9 @@ def translate_locale_file(
 ):
     """翻译JavaScript语言文件"""
     logger.info(f"开始翻译JS文件到 {target_language}")
+
+    # 提取源文件基础名称（不含扩展名）
+    source_base_name = os.path.splitext(os.path.basename(source_file_path))[0]
 
     with open(source_file_path, "r", encoding="utf-8") as f:
         content = f.read()
@@ -272,7 +279,8 @@ def translate_locale_file(
         translated_content.append(f'  "{key}": "{escaped_value}",\n')
     translated_content.append("};\n")
 
-    output_file_name = f"{target_language}.js"
+    # 输出文件名包含源文件名，避免多文件翻译时的命名冲突
+    output_file_name = f"{source_base_name}_{target_language}.js"
     output_path = os.path.join(output_dir, output_file_name)
 
     # 确保输出目录存在
