@@ -1,5 +1,6 @@
 // 翻译工具 - JavaScript逻辑
 // 注意：languages 变量由 HTML 中的 inline script 提供（服务器端渲染）
+/* global languages */
 
 let selectedLanguages = new Set();
 let claudeModels = [];  // 存储 Claude 模型列表
