@@ -271,6 +271,57 @@ Output the translated JSON only. Remember: translate to {target_lang_name}, NOT 
         raise
 
 
+def _create_dynamic_batches(items, use_dynamic=True):
+    """根据内容长度创建智能批次
+
+    Args:
+        items: 键值对列表 [(key, value), ...]
+        use_dynamic: 是否使用动态批处理
+
+    Returns:
+        批次列表，每个批次是一个字典
+    """
+    if not use_dynamic or not USE_ADVANCED_CONFIG:
+        # 使用固定批次大小
+        batches = []
+        for i in range(0, len(items), BATCH_SIZE):
+            batches.append(dict(items[i : i + BATCH_SIZE]))
+        return batches
+
+    # 获取配置
+    max_chars = BATCH_CONFIG.get('max_chars_per_batch', 3000)
+    min_size = BATCH_CONFIG.get('min_batch_size', 2)
+    max_size = BATCH_CONFIG.get('max_batch_size', 25)
+
+    batches = []
+    current_batch = {}
+    current_chars = 0
+
+    for key, value in items:
+        # 计算当前项的字符数
+        item_chars = len(str(key)) + len(str(value))
+
+        # 判断是否需要开始新批次
+        should_start_new = (
+            len(current_batch) >= max_size or  # 达到最大批次大小
+            (current_chars + item_chars > max_chars and len(current_batch) >= min_size)  # 超过字符限制且达到最小批次
+        )
+
+        if should_start_new and current_batch:
+            batches.append(current_batch)
+            current_batch = {}
+            current_chars = 0
+
+        current_batch[key] = value
+        current_chars += item_chars
+
+    # 添加最后一个批次
+    if current_batch:
+        batches.append(current_batch)
+
+    return batches
+
+
 def translate_json_file_claude(source_file_path, target_language="en", progress_callback=None, model=None, output_dir="output"):
     """使用Claude翻译JSON文件
 
@@ -295,52 +346,69 @@ def translate_json_file_claude(source_file_path, target_language="en", progress_
     total_items = len(data)
     logger.info(f"文件包含 {total_items} 个项目")
 
-    # 分批处理
+    # 创建智能批次
     items = list(data.items())
+    use_dynamic = USE_ADVANCED_CONFIG and BATCH_CONFIG.get('dynamic_batching', False)
+    batches = _create_dynamic_batches(items, use_dynamic)
+    total_batches = len(batches)
+
+    if use_dynamic:
+        avg_batch_size = total_items / total_batches
+        logger.info(f"使用智能批处理：{total_batches} 个批次，平均每批 {avg_batch_size:.1f} 项")
+    else:
+        logger.info(f"使用固定批处理：{total_batches} 个批次，每批 {BATCH_SIZE} 项")
+
     translated_data = {}
     failed_batches = []  # 记录失败的批次
+    processed_items = 0
 
-    for i in range(0, total_items, BATCH_SIZE):
-        batch_items = dict(items[i : i + BATCH_SIZE])
-        batch_num = i // BATCH_SIZE + 1
-        total_batches = (total_items + BATCH_SIZE - 1) // BATCH_SIZE
+    for batch_num, batch_items in enumerate(batches, 1):
+        batch_size = len(batch_items)
+        logger.info(f"翻译批次 {batch_num}/{total_batches} (包含 {batch_size} 项)")
 
-        logger.info(f"翻译批次 {batch_num}/{total_batches}")
-        
         # 发送进度更新
         if progress_callback:
-            progress = (i / total_items) * 100
-            progress_callback(progress, f"翻译批次 {batch_num}/{total_batches}")
+            progress = (processed_items / total_items) * 100
+            progress_callback(progress, f"翻译批次 {batch_num}/{total_batches} ({batch_size} 项)")
 
         try:
             # 翻译这一批，传递选定的模型
             translated_batch = translate_with_claude(batch_items, target_language, selected_model)
             translated_data.update(translated_batch)
+            processed_items += batch_size
 
-            # 请求间隔
-            if i + BATCH_SIZE < total_items:
-                time.sleep(REQUEST_DELAY)
+            # 请求间隔（使用配置的延迟）
+            if batch_num < total_batches:
+                delay = BATCH_CONFIG.get('request_delay', REQUEST_DELAY) if USE_ADVANCED_CONFIG else REQUEST_DELAY
+                time.sleep(delay)
 
         except Exception as e:
             logger.error(f"批次 {batch_num} 翻译失败: {e}")
             # 重试机制
             retry_count = 0
-            max_retries = 3
-            
+            max_retries = BATCH_CONFIG.get('max_retries', MAX_RETRIES) if USE_ADVANCED_CONFIG else MAX_RETRIES
+
             while retry_count < max_retries:
                 retry_count += 1
                 logger.info(f"重试批次 {batch_num} (尝试 {retry_count}/{max_retries})")
-                
+
                 try:
-                    time.sleep(REQUEST_DELAY * 2)  # 延长等待时间
+                    # 使用配置的重试延迟
+                    retry_delay = REQUEST_DELAY * 2
+                    if USE_ADVANCED_CONFIG and 'retry_delays' in BATCH_CONFIG:
+                        retry_delays = BATCH_CONFIG['retry_delays']
+                        retry_delay = retry_delays[min(retry_count - 1, len(retry_delays) - 1)]
+
+                    time.sleep(retry_delay)
                     translated_batch = translate_with_claude(batch_items, target_language, selected_model)
-                    
+
                     # 验证翻译结果
                     if target_language != "en" and _contains_too_much_english(translated_batch):
                         logger.warning(f"批次 {batch_num} 包含过多英文，重试...")
                         continue
-                    
+
                     translated_data.update(translated_batch)
+                    processed_items += batch_size
                     break
                 except Exception as retry_e:
                     logger.error(f"重试失败: {retry_e}")
@@ -353,11 +421,12 @@ def translate_json_file_claude(source_file_path, target_language="en", progress_
                             'item_count': len(batch_items)
                         })
                         translated_data.update(batch_items)
+                        processed_items += batch_size
 
                         # 通知前端
                         if progress_callback:
                             progress_callback(
-                                (i / total_items) * 100,
+                                (processed_items / total_items) * 100,
                                 f"⚠️ 批次 {batch_num}/{total_batches} 翻译失败，已保留原文"
                             )
 

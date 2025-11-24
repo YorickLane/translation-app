@@ -6,10 +6,16 @@
 
 # 批处理优化参数
 BATCH_CONFIG = {
-    "size": 2,  # 减小到2以彻底避免长内容截断（从5改为2）
-    "request_delay": 1.0,  # 增加请求间隔，避免速率限制
+    "size": 15,  # 默认批次大小（适合大多数短文本）
+    "request_delay": 0.3,  # 减少请求间隔（Claude API 速率限制很高）
     "max_retries": 3,  # 最大重试次数
     "retry_delays": [1.0, 2.0, 4.0],  # 渐进式重试延迟
+
+    # 智能批处理：根据内容长度动态调整
+    "dynamic_batching": True,
+    "max_chars_per_batch": 3000,  # 每批最大字符数（避免超过 token 限制）
+    "min_batch_size": 2,  # 最小批次大小（长文本保护）
+    "max_batch_size": 25,  # 最大批次大小
 }
 
 # 语言代码映射（解决API兼容性问题）
