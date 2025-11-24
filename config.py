@@ -25,14 +25,14 @@ GOOGLE_APPLICATION_CREDENTIALS = "./serviceKey.json"
 
 # Claude API配置
 CLAUDE_API_KEY = os.environ.get("CLAUDE_API_KEY", "")
-CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-3-5-sonnet-latest")  # Default model
 
-# 可用的 Claude 模型列表
+# 可用的 Claude 模型列表（第一个为默认推荐模型）
 CLAUDE_MODELS = [
     {
         "id": "claude-sonnet-4-5-20250929",
         "name": "Claude Sonnet 4.5 ⭐",
-        "description": "最新最强模型，最佳编码和复杂代理能力（推荐）"
+        "description": "最新最强模型，最佳编码和复杂代理能力（推荐）",
+        "default": True  # 默认模型标记
     },
     {
         "id": "claude-sonnet-4-20250514",
@@ -65,6 +65,10 @@ CLAUDE_MODELS = [
         "description": "经济快速，适合简单翻译"
     }
 ]
+
+# 自动获取默认模型（优先使用标记为 default 的，否则取列表第一个）
+_default_model = next((m["id"] for m in CLAUDE_MODELS if m.get("default")), CLAUDE_MODELS[0]["id"] if CLAUDE_MODELS else "claude-sonnet-4-5-20250929")
+CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", _default_model)
 
 # 翻译配置
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
