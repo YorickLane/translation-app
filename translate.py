@@ -310,6 +310,29 @@ def create_zip(files, output_filename):
         raise
 
 
+def create_zip_with_structure(files_with_paths, output_filename):
+    """
+    创建保持目录结构的 ZIP 文件
+
+    Args:
+        files_with_paths: [(相对路径, 绝对路径), ...] 列表
+        output_filename: 输出 ZIP 文件路径
+    """
+    logger.info(f"创建ZIP文件（保持目录结构）: {output_filename}")
+    try:
+        with zipfile.ZipFile(output_filename, "w", zipfile.ZIP_DEFLATED) as zipf:
+            for relative_path, full_path in files_with_paths:
+                if os.path.exists(full_path):
+                    zipf.write(full_path, arcname=relative_path)
+                    logger.info(f"添加文件到ZIP: {relative_path}")
+                else:
+                    logger.warning(f"文件不存在，跳过: {full_path}")
+        logger.info(f"ZIP文件创建完成，共 {len(files_with_paths)} 个文件")
+    except Exception as e:
+        logger.error(f"创建ZIP文件失败: {e}")
+        raise
+
+
 def translate_file(source_file_path, target_language="en", progress_callback=None, output_dir="output"):
     """根据文件类型调用相应的翻译函数
 

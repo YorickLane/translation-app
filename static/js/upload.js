@@ -88,12 +88,38 @@ fileUpload.addEventListener('dragleave', () => {
     fileUpload.classList.remove('dragover');
 });
 
-fileUpload.addEventListener('drop', (e) => {
+fileUpload.addEventListener('drop', async (e) => {
     e.preventDefault();
     fileUpload.classList.remove('dragover');
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-        handleFileSelection(files);
+
+    // 检查是否有 DataTransferItemList（支持文件夹拖拽）
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+        // 检查是否包含文件夹
+        let hasDirectory = false;
+        for (const item of e.dataTransfer.items) {
+            const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+            if (entry && entry.isDirectory) {
+                hasDirectory = true;
+                break;
+            }
+        }
+
+        if (hasDirectory) {
+            // 使用异步处理文件夹
+            await handleDropItems(e.dataTransfer.items);
+        } else {
+            // 普通文件，使用原有逻辑
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileSelection(files);
+            }
+        }
+    } else {
+        // 回退到传统方式
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            handleFileSelection(files);
+        }
     }
 });
 
@@ -115,7 +141,7 @@ function getFileId(file) {
 }
 
 function handleFileSelection(files) {
-    const validTypes = ['.js', '.json'];
+    const validTypes = ['.js', '.json', '.zip'];
     const newFiles = [];
 
     Array.from(files).forEach(file => {
@@ -129,13 +155,14 @@ function handleFileSelection(files) {
                     status: 'waiting',  // waiting, processing, completed, failed
                     progress: 0,
                     error: null,
-                    result: null
+                    result: null,
+                    isZip: fileExtension === '.zip'  // 标记 ZIP 文件
                 });
             } else {
                 console.log(`文件 "${file.name}" 已在队列中，跳过`);
             }
         } else {
-            alert(`文件 "${file.name}" 不是有效的 .js 或 .json 文件`);
+            alert(`文件 "${file.name}" 不是有效的 .js、.json 或 .zip 文件`);
         }
     });
 
@@ -177,11 +204,17 @@ function updateFileQueueUI() {
             'failed': '<i class="fas fa-times-circle" style="color: #dc3545;"></i>'
         }[item.status];
 
+        // ZIP 文件特殊标记
+        const fileTypeIcon = item.isZip
+            ? '<i class="fas fa-file-archive" style="color: #6c5ce7; margin-right: 5px;"></i>'
+            : '<i class="fas fa-file-code" style="color: #74b9ff; margin-right: 5px;"></i>';
+        const fileTypeLabel = item.isZip ? ' <span style="color: #6c5ce7; font-size: 0.8em;">[压缩包]</span>' : '';
+
         return `
             <div class="queue-item" data-id="${item.id}">
                 <div class="queue-item-icon">${icon}</div>
                 <div class="queue-item-info">
-                    <div class="queue-item-name">${item.file.name}</div>
+                    <div class="queue-item-name">${fileTypeIcon}${item.file.name}${fileTypeLabel}</div>
                     <div class="queue-item-details">
                         ${(item.file.size / 1024).toFixed(1)} KB
                         ${item.error ? ` • <span style="color: #dc3545;">${item.error}</span>` : ''}
@@ -819,6 +852,103 @@ function loadDefaultModels() {
     }
 }
 
+// ========== 文件夹上传支持 ==========
+
+// 文件夹选择处理
+function handleFolderSelection() {
+    const folderInput = document.getElementById('folderInput');
+    if (folderInput) {
+        folderInput.click();
+    }
+}
+
+// 文件夹 input change 事件处理
+function setupFolderInput() {
+    const folderInput = document.getElementById('folderInput');
+    if (folderInput) {
+        folderInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                // 过滤出有效的 .js 和 .json 文件
+                const validFiles = Array.from(e.target.files).filter(file => {
+                    const ext = '.' + file.name.split('.').pop().toLowerCase();
+                    return ['.js', '.json'].includes(ext);
+                });
+
+                if (validFiles.length > 0) {
+                    handleFileSelection(validFiles);
+                } else {
+                    alert('文件夹中没有找到有效的 .js 或 .json 文件');
+                }
+
+                // 重置 input 以允许再次选择同一文件夹
+                e.target.value = '';
+            }
+        });
+    }
+}
+
+// 递归遍历目录（用于拖拽）
+async function traverseDirectory(entry, path = '') {
+    const files = [];
+
+    if (entry.isFile) {
+        try {
+            const file = await new Promise((resolve, reject) => {
+                entry.file(resolve, reject);
+            });
+            // 添加相对路径信息
+            Object.defineProperty(file, 'relativePath', {
+                value: path + file.name,
+                writable: false
+            });
+            files.push(file);
+        } catch (e) {
+            console.error('读取文件失败:', e);
+        }
+    } else if (entry.isDirectory) {
+        const reader = entry.createReader();
+        const entries = await new Promise((resolve, reject) => {
+            reader.readEntries(resolve, reject);
+        });
+
+        for (const e of entries) {
+            const subFiles = await traverseDirectory(e, path + entry.name + '/');
+            files.push(...subFiles);
+        }
+    }
+
+    return files;
+}
+
+// 处理拖拽的文件/文件夹
+async function handleDropItems(items) {
+    const allFiles = [];
+
+    for (const item of items) {
+        if (item.kind === 'file') {
+            const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+
+            if (entry) {
+                if (entry.isDirectory) {
+                    // 递归获取文件夹中的文件
+                    const dirFiles = await traverseDirectory(entry);
+                    allFiles.push(...dirFiles);
+                } else {
+                    // 普通文件
+                    allFiles.push(item.getAsFile());
+                }
+            } else {
+                // 回退到普通文件获取
+                allFiles.push(item.getAsFile());
+            }
+        }
+    }
+
+    if (allFiles.length > 0) {
+        handleFileSelection(allFiles);
+    }
+}
+
 // 初始化
 updateSubmitButton();
 
@@ -835,7 +965,10 @@ window.addEventListener('load', () => {
 
     // 重置进度条颜色
     progressFill.style.background = 'linear-gradient(90deg, #4facfe, #00f2fe)';
-    
+
     // 加载 Claude 模型列表
     loadClaudeModels();
+
+    // 设置文件夹 input
+    setupFolderInput();
 });

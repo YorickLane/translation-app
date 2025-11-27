@@ -1,6 +1,6 @@
 # app.py
 
-from translate import translate_text, translate_file, create_zip
+from translate import translate_text, translate_file, create_zip, create_zip_with_structure
 from translate_claude import translate_json_file_claude, translate_js_file_claude
 from claude_models import get_claude_models
 from claude_token_counter import count_tokens_for_translation, count_tokens_with_api, format_cost_summary
@@ -10,6 +10,7 @@ from werkzeug.utils import secure_filename
 import os
 import uuid
 import shutil
+import zipfile
 from functools import lru_cache
 from google.cloud import translate_v2 as translate
 import datetime
@@ -29,7 +30,7 @@ socketio = SocketIO(app, async_mode='threading')
 # Configuration
 UPLOAD_FOLDER = "uploads"
 OUTPUT_FOLDER = "output"
-ALLOWED_EXTENSIONS = {"json", "js"}
+ALLOWED_EXTENSIONS = {"json", "js", "zip"}
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "./serviceKey.json"
 
@@ -57,6 +58,53 @@ def get_supported_languages():
 
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def is_zip_file(filename):
+    """检查文件是否为 ZIP 文件"""
+    return "." in filename and filename.rsplit(".", 1)[1].lower() == "zip"
+
+
+def extract_zip_files(zip_path, extract_dir):
+    """
+    解压 ZIP 文件，递归获取所有有效的 .json/.js 文件
+    返回: [(相对路径, 绝对路径), ...]
+    """
+    valid_files = []
+
+    try:
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            # 安全检查：防止路径穿越攻击
+            for name in zf.namelist():
+                if '..' in name or name.startswith('/'):
+                    logger.warning(f"跳过可疑路径: {name}")
+                    continue
+
+            # 解压所有文件
+            zf.extractall(extract_dir)
+
+            # 递归查找有效文件
+            for name in zf.namelist():
+                # 跳过 macOS 资源文件和目录
+                if name.startswith('__MACOSX') or name.startswith('._') or name.endswith('/'):
+                    continue
+
+                # 检查是否为有效的翻译文件
+                if name.endswith(('.json', '.js')):
+                    full_path = os.path.join(extract_dir, name)
+                    if os.path.exists(full_path) and os.path.isfile(full_path):
+                        valid_files.append((name, full_path))
+                        logger.info(f"发现有效文件: {name}")
+
+        logger.info(f"ZIP 解压完成，共发现 {len(valid_files)} 个有效文件")
+        return valid_files
+
+    except zipfile.BadZipFile:
+        logger.error(f"无效的 ZIP 文件: {zip_path}")
+        raise ValueError("上传的文件不是有效的 ZIP 压缩包")
+    except Exception as e:
+        logger.error(f"解压 ZIP 文件失败: {e}")
+        raise
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -89,6 +137,156 @@ def get_claude_models_api():
         return jsonify({"success": False, "error": str(e), "models": []})
 
 
+def translate_single_file(file_path, target_language, translation_engine, claude_model, output_dir, progress_callback=None):
+    """
+    翻译单个文件
+    返回: (输出文件名, 输出文件完整路径)
+    """
+    file_extension = os.path.splitext(file_path)[1].lower()
+
+    if translation_engine == "claude":
+        if file_extension == ".json":
+            output_file_name = translate_json_file_claude(
+                file_path, target_language, progress_callback, claude_model, output_dir
+            )
+        elif file_extension == ".js":
+            output_file_name = translate_js_file_claude(
+                file_path, target_language, progress_callback, claude_model, output_dir
+            )
+        else:
+            raise ValueError(f"不支持的文件类型: {file_extension}")
+    else:
+        output_file_name = translate_file(
+            file_path, target_language, progress_callback, output_dir
+        )
+
+    return output_file_name, os.path.join(output_dir, output_file_name)
+
+
+def process_zip_archive(zip_path, target_languages, translation_engine, claude_model, output_dir, base_name, timestamp, unique_id):
+    """
+    处理 ZIP 压缩包：解压、翻译所有文件、保持目录结构打包
+    返回: (zip_name, zip_path) 或 None
+    """
+    # 创建临时解压目录
+    extract_dir = os.path.join(output_dir, "extracted")
+    os.makedirs(extract_dir, exist_ok=True)
+
+    try:
+        # 解压并获取有效文件列表
+        valid_files = extract_zip_files(zip_path, extract_dir)
+
+        if not valid_files:
+            raise ValueError("ZIP 文件中没有找到有效的 .json 或 .js 文件")
+
+        total_files = len(valid_files)
+        total_languages = len(target_languages)
+        total_tasks = total_files * total_languages
+
+        # 存储翻译结果：{语言: [(相对路径, 输出文件路径), ...]}
+        translated_files = []
+        completed_tasks = 0
+
+        for lang_index, target_language in enumerate(target_languages):
+            # 为每种语言创建输出子目录
+            lang_output_dir = os.path.join(output_dir, target_language)
+            os.makedirs(lang_output_dir, exist_ok=True)
+
+            socketio.emit(
+                "progress",
+                {
+                    "progress": (completed_tasks / total_tasks) * 100,
+                    "message": f"开始翻译到 {target_language}...",
+                },
+                namespace="/test",
+            )
+
+            for file_index, (relative_path, full_path) in enumerate(valid_files):
+                try:
+                    # 计算进度
+                    task_start = completed_tasks / total_tasks * 100
+                    task_end = (completed_tasks + 1) / total_tasks * 100
+
+                    # 创建保持目录结构的输出路径
+                    relative_dir = os.path.dirname(relative_path)
+                    if relative_dir:
+                        file_output_dir = os.path.join(lang_output_dir, relative_dir)
+                        os.makedirs(file_output_dir, exist_ok=True)
+                    else:
+                        file_output_dir = lang_output_dir
+
+                    # 进度回调
+                    def progress_callback(item_progress, message):
+                        total_progress = task_start + (item_progress / 100) * (task_end - task_start)
+                        socketio.emit(
+                            "progress",
+                            {
+                                "progress": total_progress,
+                                "message": f"{target_language} - {os.path.basename(relative_path)}: {message}",
+                            },
+                            namespace="/test",
+                        )
+
+                    socketio.emit(
+                        "progress",
+                        {
+                            "progress": task_start,
+                            "message": f"翻译 {relative_path} 到 {target_language}...",
+                        },
+                        namespace="/test",
+                    )
+
+                    # 翻译文件
+                    output_file_name, output_file_path = translate_single_file(
+                        full_path, target_language, translation_engine, claude_model,
+                        file_output_dir, progress_callback
+                    )
+
+                    # 计算输出文件的相对路径（保持原始目录结构）
+                    if relative_dir:
+                        output_relative_path = os.path.join(target_language, relative_dir, output_file_name)
+                    else:
+                        output_relative_path = os.path.join(target_language, output_file_name)
+
+                    translated_files.append((output_relative_path, output_file_path))
+
+                    logger.info(f"翻译完成: {relative_path} -> {output_relative_path}")
+
+                except Exception as e:
+                    error_msg = str(e)
+                    logger.error(f"翻译失败 {relative_path} ({target_language}): {error_msg}")
+                    socketio.emit(
+                        "progress",
+                        {
+                            "progress": task_end,
+                            "error": f"⚠️ {relative_path} ({target_language}) 翻译失败: {error_msg}",
+                        },
+                        namespace="/test",
+                    )
+
+                completed_tasks += 1
+
+        if not translated_files:
+            raise ValueError("所有文件翻译都失败了")
+
+        # 创建输出 ZIP（保持目录结构）
+        zip_name = f"translations_{base_name}_{timestamp}_{unique_id}.zip"
+        zip_path_output = os.path.join(OUTPUT_FOLDER, zip_name)
+
+        create_zip_with_structure(translated_files, zip_path_output)
+        logger.info(f"ZIP 文件创建完成: {zip_path_output}")
+
+        return zip_name, zip_path_output
+
+    finally:
+        # 清理解压目录
+        if os.path.exists(extract_dir):
+            try:
+                shutil.rmtree(extract_dir)
+            except Exception as e:
+                logger.warning(f"清理解压目录失败: {e}")
+
+
 @app.route("/translate", methods=["POST"])
 def translate_file_route():
     try:
@@ -113,7 +311,7 @@ def translate_file_route():
         timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         unique_id = uuid.uuid4().hex[:8]
         base_name = os.path.splitext(original_filename)[0]
-        file_extension = os.path.splitext(original_filename)[1]
+        file_extension = os.path.splitext(original_filename)[1].lower()
         unique_filename = f"{base_name}_{timestamp}_{unique_id}{file_extension}"
 
         # 保存上传文件
@@ -139,6 +337,41 @@ def translate_file_route():
         # Get Claude model if using Claude
         claude_model = request.form.get("claude_model", config.CLAUDE_MODEL)
 
+        # ========== ZIP 文件处理 ==========
+        if is_zip_file(original_filename):
+            try:
+                zip_name, zip_path = process_zip_archive(
+                    saved_file_path, target_languages, translation_engine,
+                    claude_model, output_dir, base_name, timestamp, unique_id
+                )
+
+                # 清理
+                if os.path.exists(saved_file_path):
+                    os.remove(saved_file_path)
+                if os.path.exists(output_dir):
+                    shutil.rmtree(output_dir)
+
+                # 发送完成信号
+                socketio.emit(
+                    "progress",
+                    {
+                        "progress": 100,
+                        "message": "ZIP 压缩包翻译全部完成！",
+                        "complete": True,
+                        "redirect_url": f"/success?zip_path=/output/{zip_name}",
+                    },
+                    namespace="/test",
+                )
+
+                eventlet.sleep(0.5)
+                return "", 200
+
+            except Exception as e:
+                logger.error(f"ZIP 处理失败: {e}")
+                flash(f"ZIP 处理失败: {e}")
+                return redirect("/")
+
+        # ========== 单文件处理（原有逻辑） ==========
         output_files = []
         total_languages = len(target_languages)
 
@@ -175,25 +408,11 @@ def translate_file_route():
                         namespace="/test",
                     )
 
-                if translation_engine == "claude":
-                    # Use Claude API for translation with selected model
-                    # 根据文件类型选择相应的翻译函数
-                    if file_extension == ".json":
-                        output_file_name = translate_json_file_claude(
-                            saved_file_path, target_language, progress_callback, claude_model, output_dir
-                        )
-                    elif file_extension == ".js":
-                        output_file_name = translate_js_file_claude(
-                            saved_file_path, target_language, progress_callback, claude_model, output_dir
-                        )
-                    else:
-                        raise ValueError(f"不支持的文件类型: {file_extension}")
-                else:
-                    # Use Google Translate API
-                    output_file_name = translate_file(
-                        saved_file_path, target_language, progress_callback, output_dir
-                    )
-                output_files.append(os.path.join(output_dir, output_file_name))
+                output_file_name, output_file_path = translate_single_file(
+                    saved_file_path, target_language, translation_engine,
+                    claude_model, output_dir, progress_callback
+                )
+                output_files.append(output_file_path)
                 print(
                     f"Translation to {target_language} completed. Output file: {output_file_name}"
                 )
