@@ -127,15 +127,19 @@ def _contains_too_much_english(translations):
 
 
 def translate_with_claude(texts, target_language="en", model=None):
-    """使用Claude API翻译文本"""
+    """使用Claude API翻译文本
+
+    重要：只发送 value 列表给 Claude，翻译完成后使用原始 key 组装结果，
+    确保 key 不会被错误翻译。
+    """
     if not CLAUDE_API_KEY:
         raise ValueError("请设置CLAUDE_API_KEY环境变量")
 
     client = Anthropic(api_key=CLAUDE_API_KEY)
-    
+
     # 使用传入的模型或默认模型
     selected_model = model or CLAUDE_MODEL
-    
+
     # 处理语言代码映射
     if USE_ADVANCED_CONFIG and target_language in LANGUAGE_CODE_MAPPING:
         api_language_code = LANGUAGE_CODE_MAPPING[target_language]
@@ -146,8 +150,14 @@ def translate_with_claude(texts, target_language="en", model=None):
     # 准备翻译提示
     target_lang_name = LANGUAGE_NAMES.get(api_language_code, api_language_code)
 
-    # 构建JSON格式的输入
-    json_input = json.dumps(texts, ensure_ascii=False, indent=2)
+    # 保存原始 key 的顺序（确保 key 不会被翻译）
+    original_keys = list(texts.keys())
+
+    # 只提取 value 列表发送给 Claude（不发送 key）
+    values_only = list(texts.values())
+
+    # 构建JSON格式的输入（只包含 value 数组）
+    json_input = json.dumps(values_only, ensure_ascii=False, indent=2)
 
     # 语言特定的大写规则
     capitalization_rules = {
@@ -188,29 +198,31 @@ def translate_with_claude(texts, target_language="en", model=None):
     specific_rules = capitalization_rules.get(target_language, 
         "- Follow the standard capitalization rules for this language\n- Be consistent throughout the translation")
 
-    prompt = f"""Please translate the following JSON content to {target_lang_name}.
+    prompt = f"""Please translate the following JSON array of strings to {target_lang_name}.
 
 CRITICAL REQUIREMENTS:
-1. Keep the JSON structure exactly the same, only translate the values (not the keys)
-2. NEVER return English translations for non-English target languages
-3. You MUST translate to {target_lang_name} ({target_language})
-4. Maintain any special formatting, placeholders (like {{{{0}}}}), or HTML tags
+1. Translate EACH string in the array to {target_lang_name}
+2. Keep the array structure exactly the same (same number of elements, same order)
+3. NEVER return English translations for non-English target languages
+4. You MUST translate to {target_lang_name} ({target_language})
+5. Maintain any special formatting, placeholders (like {{{{0}}}}), or HTML tags
 
 CAPITALIZATION RULES for {target_lang_name}:
 {specific_rules}
 
 JSON OUTPUT REQUIREMENTS:
-- Output ONLY valid JSON, no additional text or explanation
+- Output ONLY a valid JSON array, no additional text or explanation
+- The output array MUST have exactly {len(values_only)} elements (same as input)
 - Do NOT add comments (// or /* */)
 - Do NOT wrap in markdown code blocks (```json)
 - Ensure all strings are properly escaped
 - Use double quotes for all strings (not single quotes)
 - Do NOT add trailing commas
 
-Input JSON:
+Input JSON array ({len(values_only)} strings):
 {json_input}
 
-Output the translated JSON only. Remember: translate to {target_lang_name}, NOT English!"""
+Output the translated JSON array only. Remember: translate to {target_lang_name}, NOT English!"""
 
     try:
         # 调用Claude API
@@ -232,16 +244,9 @@ Output the translated JSON only. Remember: translate to {target_lang_name}, NOT 
         # 解析响应
         raw_response = response.content[0].text.strip()
 
-        # 尝试解析JSON
+        # 尝试解析JSON数组
         try:
-            translated_data = json.loads(raw_response)
-
-            # 应用后处理
-            if USE_ADVANCED_CONFIG:
-                translated_data = post_process_translation(translated_data, target_language)
-
-            return translated_data
-
+            translated_values = json.loads(raw_response)
         except json.JSONDecodeError as e:
             # JSON 解析失败，尝试清理响应
             logger.warning(f"初始 JSON 解析失败，尝试清理响应...")
@@ -249,22 +254,31 @@ Output the translated JSON only. Remember: translate to {target_lang_name}, NOT 
 
             try:
                 cleaned_response = clean_json_response(raw_response)
-                translated_data = json.loads(cleaned_response)
-
+                translated_values = json.loads(cleaned_response)
                 logger.info("清理后的响应解析成功")
-
-                # 应用后处理
-                if USE_ADVANCED_CONFIG:
-                    translated_data = post_process_translation(translated_data, target_language)
-
-                return translated_data
-
             except json.JSONDecodeError as clean_error:
                 # 清理后仍然失败，记录详细错误
                 logger.error(f"清理后仍无法解析 JSON: {clean_error}")
                 logger.error(f"清理后的响应前500字符: {cleaned_response[:500]}")
                 logger.error(f"JSON 错误位置: 行 {clean_error.lineno}, 列 {clean_error.colno}")
                 raise Exception(f"JSON 解析失败: {clean_error}")
+
+        # 验证翻译结果数量是否与原始数量一致
+        if not isinstance(translated_values, list):
+            raise ValueError(f"Claude 返回的不是数组: {type(translated_values)}")
+
+        if len(translated_values) != len(original_keys):
+            logger.error(f"翻译结果数量不匹配: 期望 {len(original_keys)}，实际 {len(translated_values)}")
+            raise ValueError(f"翻译结果数量 ({len(translated_values)}) 与原始数量 ({len(original_keys)}) 不匹配")
+
+        # 使用原始 key 和翻译后的 value 组装字典（确保 key 不被修改）
+        translated_data = dict(zip(original_keys, translated_values))
+
+        # 应用后处理
+        if USE_ADVANCED_CONFIG:
+            translated_data = post_process_translation(translated_data, target_language)
+
+        return translated_data
 
     except Exception as e:
         logger.error(f"Claude API错误: {e}")
