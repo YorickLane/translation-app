@@ -23,6 +23,12 @@ class ModelInfo(TypedDict):
 
 
 # 模型目录（2026-04-22 校准自 https://openrouter.ai/api/v1/models）
+#
+# ⚠️ Opus 4.7+ breaking change: 设 temperature/top_p/top_k 为非默认值会 400 error
+#    (源: platform.claude.com/docs/en/about-claude/models/whats-new, 2026-04-22)
+#    如果未来加 `anthropic/claude-opus-4.7` 或 `anthropic/claude-opus-5*` 进这个 list，
+#    必须先在 llm_client.py 的 translate_batch() 里按 slug 条件化 strip 掉 temperature。
+#    当前 3 档（Sonnet 4.6 / GPT-5.4 / Gemini Flash Lite）都支持 temperature，无需处理。
 AVAILABLE_MODELS: list[ModelInfo] = [
     {
         "id": "anthropic/claude-sonnet-4.6",
