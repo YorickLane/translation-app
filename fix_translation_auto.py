@@ -8,8 +8,8 @@ import os
 import sys
 import time
 import logging
-from translate_claude import translate_with_claude
-from config import CLAUDE_MODEL, REQUEST_DELAY
+from translate_llm import translate_with_llm
+from config import DEFAULT_MODEL, REQUEST_DELAY
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -70,7 +70,7 @@ def fix_english_contamination(filepath, language_code, source_file):
         batch = dict(items[i:i+batch_size])
         try:
             logger.info(f"翻译批次 {i//batch_size + 1}/{(len(items) + batch_size - 1)//batch_size}")
-            translated = translate_with_claude(batch, language_code, CLAUDE_MODEL)
+            translated = translate_with_llm(batch, language_code, DEFAULT_MODEL)
             
             # 更新数据
             for key, value in translated.items():
@@ -121,7 +121,7 @@ def fix_missing_translations(filepath, language_code, source_file):
         batch = dict(items[i:i+batch_size])
         try:
             logger.info(f"翻译批次 {i//batch_size + 1}/{(len(items) + batch_size - 1)//batch_size}")
-            translated = translate_with_claude(batch, language_code, CLAUDE_MODEL)
+            translated = translate_with_llm(batch, language_code, DEFAULT_MODEL)
             
             # 添加到数据
             for key, value in translated.items():

@@ -12,7 +12,8 @@ import os
 import argparse
 import shutil
 from datetime import datetime
-from translate_claude import translate_with_claude, CLAUDE_MODEL
+from translate_llm import translate_with_llm
+from config import DEFAULT_MODEL
 
 
 def load_json_file(filepath):
@@ -97,7 +98,7 @@ def fix_traditional_chinese(filepath, source_file_path):
         
         try:
             # 使用改进后的翻译函数
-            translated = translate_with_claude(source_batch, 'zh-TW', CLAUDE_MODEL)
+            translated = translate_with_llm(source_batch, 'zh-TW', DEFAULT_MODEL)
             
             # 更新数据
             for key, new_value in translated.items():
@@ -191,7 +192,7 @@ def fix_missing_translations(filepath, language_code, source_file_path):
         
         try:
             # 使用改进后的翻译函数
-            translated = translate_with_claude(source_batch, language_code, CLAUDE_MODEL)
+            translated = translate_with_llm(source_batch, language_code, DEFAULT_MODEL)
             
             # 更新数据
             for key, new_value in translated.items():

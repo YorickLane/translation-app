@@ -18,9 +18,17 @@ from google.api_core.exceptions import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize the client
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "./serviceKey.json"
-translate_client = translate.Client()
+# Lazy-init Google Translate client —— 只在真正使用 Google 引擎时初始化，
+# 保证项目在无 serviceKey.json 时也能启动（仅 OpenRouter 引擎可用）
+_translate_client = None
+
+
+def _get_translate_client():
+    global _translate_client
+    if _translate_client is None:
+        os.environ.setdefault("GOOGLE_APPLICATION_CREDENTIALS", "./serviceKey.json")
+        _translate_client = translate.Client()
+    return _translate_client
 
 # 配置重试和速率限制
 MAX_RETRIES = 3
@@ -38,7 +46,7 @@ def safe_translate_text(text, target_language="en", retries=0):
         # 添加请求间隔，避免速率限制
         time.sleep(REQUEST_DELAY)
 
-        result = translate_client.translate(text, target_language=target_language)
+        result = _get_translate_client().translate(text, target_language=target_language)
         # 解码 HTML 实体，修复如 &#39; 等编码问题
         return html.unescape(result["translatedText"])
 

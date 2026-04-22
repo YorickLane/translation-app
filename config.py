@@ -1,85 +1,38 @@
+"""
+翻译应用基础配置
+
+Secrets 策略: 遵循 ~/claude-soul/protocols/secrets-management.md ——
+  - OPENROUTER_API_KEY 从 shell env 读取（来源: ~/.config/secrets.env）
+  - 本项目不使用 .env 文件，不调用 python-dotenv，不通过 Keychain
+  - 从 terminal 启动应用以继承 shell env
+"""
+
 import os
-from dotenv import load_dotenv
 
-# 加载 .env 文件
-load_dotenv()
+# Flask session secret
+SECRET_KEY = os.environ.get("SECRET_KEY", "change-me-in-production")
 
-# 尝试从 macOS Keychain 加载密钥（如果在 macOS 上）
-try:
-    import platform
-    if platform.system() == "Darwin":  # macOS
-        from keychain_config import load_keychain_secrets
-        # Keychain 会自动加载密钥
-except ImportError:
-    pass
+# 翻译引擎: 'openrouter' (LLM 多 provider) 或 'google' (Google Translate)
+TRANSLATION_ENGINE = os.environ.get("TRANSLATION_ENGINE", "openrouter")
 
-# Flask secret key for session management
-SECRET_KEY = os.environ.get("SECRET_KEY", "your-secret-key-here-change-in-production")
-
-# 翻译引擎配置
-# 可选值: 'google' 或 'claude'
-TRANSLATION_ENGINE = os.environ.get("TRANSLATION_ENGINE", "google")
-
-# Google Cloud配置
+# Google Cloud Translate 凭证（仅 google 引擎需要）
 GOOGLE_APPLICATION_CREDENTIALS = "./serviceKey.json"
 
-# Claude API配置
-CLAUDE_API_KEY = os.environ.get("CLAUDE_API_KEY", "")
+# OpenRouter API Key —— 走 shell env，来源 ~/.config/secrets.env
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 
-# 可用的 Claude 模型列表（第一个为默认推荐模型）
-CLAUDE_MODELS = [
-    {
-        "id": "claude-sonnet-4-5-20250929",
-        "name": "Claude Sonnet 4.5 ⭐",
-        "description": "最新最强模型，最佳编码和复杂代理能力（推荐）",
-        "default": True  # 默认模型标记
-    },
-    {
-        "id": "claude-sonnet-4-20250514",
-        "name": "Claude Sonnet 4 ✨",
-        "description": "高智能平衡性能，适合日常翻译"
-    },
-    {
-        "id": "claude-3-5-sonnet-latest",
-        "name": "Claude 3.5 Sonnet (Latest)",
-        "description": "自动更新到最新版本的 Sonnet"
-    },
-    {
-        "id": "claude-opus-4-20250514",
-        "name": "Claude Opus 4 ⚡",
-        "description": "超高智能，适合最复杂的翻译任务"
-    },
-    {
-        "id": "claude-3-5-haiku-20241022",
-        "name": "Claude 3.5 Haiku",
-        "description": "快速且智能，适合大量翻译任务"
-    },
-    {
-        "id": "claude-3-opus-20240229",
-        "name": "Claude 3 Opus",
-        "description": "Claude 3 系列最强大的模型"
-    },
-    {
-        "id": "claude-3-haiku-20240307",
-        "name": "Claude 3 Haiku",
-        "description": "经济快速，适合简单翻译"
-    }
-]
+# 默认 LLM 模型（见 llm_models.AVAILABLE_MODELS）
+DEFAULT_MODEL = os.environ.get("DEFAULT_MODEL", "anthropic/claude-sonnet-4.6")
 
-# 自动获取默认模型（优先使用标记为 default 的，否则取列表第一个）
-_default_model = next((m["id"] for m in CLAUDE_MODELS if m.get("default")), CLAUDE_MODELS[0]["id"] if CLAUDE_MODELS else "claude-sonnet-4-5-20250929")
-CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", _default_model)
-
-# 翻译配置
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+# 文件限制
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 ALLOWED_EXTENSIONS = {"json", "js"}
 
-# 批处理配置（可被 translation_config.py 覆盖）
-BATCH_SIZE = 3  # 每批处理的项目数（减小以避免长内容被截断）
-REQUEST_DELAY = 1.0  # 请求间隔（秒，增加以避免速率限制）
-MAX_RETRIES = 3  # 最大重试次数
+# 批处理默认值（可被 translation_config.BATCH_CONFIG 覆盖）
+BATCH_SIZE = 3
+REQUEST_DELAY = 1.0
+MAX_RETRIES = 3
 
-# 尝试加载高级配置
 try:
     from translation_config import BATCH_CONFIG
     BATCH_SIZE = BATCH_CONFIG.get('size', BATCH_SIZE)

@@ -36,19 +36,19 @@ python app.py
 # Test Google Cloud credentials
 python test_credentials.py
 
-# Test Claude API with current model configuration
-python translate_claude.py --test
+# Test OpenRouter + default model
+python translate_llm.py --test
 
-# Get available Claude models
-python claude_models.py
+# List available AI models (3 tiers: quality / alternative / economy)
+python llm_models.py
 
-# Test token counting and cost estimation
-python claude_token_counter.py
+# Estimate cost for a translation task
+python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
 ```
 
 ## Architecture Overview
 
-这是一个基于 Flask + Socket.IO 的实时翻译应用，支持 JavaScript/JSON 文件的多语言翻译。核心特点是双引擎架构（Google/Claude）和实时费用预估。
+这是一个基于 Flask + Socket.IO 的实时翻译应用，支持 JavaScript/JSON 文件的多语言翻译。核心特点是双引擎架构（Google Translate / OpenRouter LLM）和实时费用预估。**LLM 引擎通过 OpenRouter 接入多 provider（Claude / GPT / Gemini），使用 structured output (`json_schema`) 保证返回有效 JSON，无需脆弱的 regex 清理。**
 
 ### Core Components
 
@@ -64,29 +64,34 @@ python claude_token_counter.py
    - 重试逻辑处理 API 临时错误
    - 进度回调支持实时更新
 
-3. **translate_claude.py** - Claude API 翻译引擎
-   - 支持所有 Claude 模型（**Sonnet 4.5**⭐, Sonnet 4, Opus 4, 3.5/3 系列）
+3. **translate_llm.py** - OpenRouter LLM 翻译引擎（替代旧 translate_claude.py）
+   - 通过 `llm_client.py` 调 OpenRouter（OpenAI 兼容 API）
+   - **使用 `response_format: json_schema` 结构化输出** —— 保证返回 `{"translations": [...]}` 合法 JSON，删除旧版 ~40 行 regex JSON 清理代码
    - 语言特定优化：
-     - 大写规则（英语 title case，罗曼语系 lowercase）
+     - 大写规则（英语 title case，罗曼语系 lowercase，**阿拉伯语 N/A**）
      - 温度设置（繁体中文 0.05，默认 0.1）
      - 语言代码映射（zh-TW → zh-Hant）
-   - 翻译质量验证（检测英文混入）
+   - 翻译质量验证（检测英文混入触发重试）
    - 集成高级配置系统（translation_config.py）
 
-4. **claude_token_counter.py** - Token 计算和费用预估
-   - 两种计算模式：
-     - 快速估算：基于字符数和经验系数
-     - API 精确计算：使用 `messages.count_tokens()` API
-   - 2025年完整定价支持（**Sonnet 4.5**, Sonnet 4, Opus 4, 3.5/3 系列）
-   - 语言特定输出倍数（英文 0.5x，德语 1.0x 等）
-   - 批处理感知计算
-   - 双币种显示（USD/CNY，汇率 7.3）
+4. **llm_client.py** - OpenRouter 客户端层
+   - `OpenAI(base_url="https://openrouter.ai/api/v1")` 单例 client
+   - 注入 `HTTP-Referer` + `X-OpenRouter-Title` attribution headers
+   - `translate_batch()` 封装 json_schema 请求
+   - Fail-fast API key 缺失（指向 ~/.config/secrets.env 配置指引）
 
-5. **claude_models.py** - 模型配置管理
-   - 实时获取可用模型列表
-   - 1小时缓存机制
-   - API 可用性验证
-   - 支持最新 **Sonnet 4.5** 和 Opus 4
+5. **cost_estimator.py** - 费用预估（替代旧 claude_token_counter.py）
+   - 字符数估算（OpenRouter 不代理 `count_tokens` API，已移除 API 精确计算）
+   - 多 provider 定价（Claude / GPT / Gemini 基于 llm_models.AVAILABLE_MODELS）
+   - 语言特定输出倍数（英文 0.5x，德语 1.0x 等）
+   - 典型误差 20-30%，UI 明确标注"估算值"
+
+6. **llm_models.py** - AI 模型目录（替代旧 claude_models.py）
+   - 硬编码 3 档模型（不做 runtime API 发现）：
+     - 质量档: `anthropic/claude-sonnet-4.6` ⭐ ($3/$15 per MTok)
+     - 备选档: `openai/gpt-5.4` ✨ ($2.50/$15)
+     - 经济档: `google/gemini-3.1-flash-lite-preview` 💰 ($0.25/$1.50，比 Sonnet 便宜 12x)
+   - 新增模型 = 改 AVAILABLE_MODELS 常量
 
 6. **translation_config.py** (高级配置) - 翻译系统优化参数
    - 批处理配置：批次大小、延迟、重试策略
@@ -110,8 +115,8 @@ python claude_token_counter.py
 ### Key Design Patterns
 
 1. **双引擎架构**
-   - 通过 `config.TRANSLATION_ENGINE` 切换（'google'/'claude'）
-   - 运行时模型选择（用户可在 UI 选择 Claude 模型）
+   - 通过 `config.TRANSLATION_ENGINE` 切换（'google' / 'openrouter'）
+   - 运行时 AI 模型选择（用户可在 UI 选择 3 档 AI 模型）
    - 共享的进度回调接口
 
 2. **实时通信**
@@ -148,10 +153,10 @@ python claude_token_counter.py
 
 ### Configuration Files
 
-- **config.py**: 基础配置
-  - `TRANSLATION_ENGINE`: 'google' | 'claude'
-  - `CLAUDE_API_KEY`: 从环境变量或 .env 加载
-  - `CLAUDE_MODEL`: 默认 'claude-3-5-sonnet-latest'
+- **config.py**: 基础配置（遵循全局 secrets SoT —— 不用 .env 文件）
+  - `TRANSLATION_ENGINE`: 'google' | 'openrouter'
+  - `OPENROUTER_API_KEY`: 从 shell env 读取，来源 `~/.config/secrets.env`（详见 `~/claude-soul/protocols/secrets-management.md`）
+  - `DEFAULT_MODEL`: 默认 `'anthropic/claude-sonnet-4.6'`
   - `BATCH_SIZE`, `REQUEST_DELAY`, `MAX_RETRIES`
   - Google credentials: `./serviceKey.json`
 
@@ -162,13 +167,15 @@ python claude_token_counter.py
   - `TERM_GLOSSARY`: 术语一致性保证
   - `VALIDATION_STRENGTH`: 输出验证级别
 
-- **.env** (可选):
+- **Secrets**（**不使用 .env 文件** —— 项目已采用全局 SoT）:
+  ```bash
+  # ~/.config/secrets.env (chmod 600, 不进任何 git)
+  export OPENROUTER_API_KEY="sk-or-v1-..."
+
+  # ~/.zshrc 末尾 source 该文件:
+  [ -f ~/.config/secrets.env ] && source ~/.config/secrets.env
   ```
-  SECRET_KEY=your-secret-key
-  TRANSLATION_ENGINE=claude
-  CLAUDE_API_KEY=sk-ant-...
-  CLAUDE_MODEL=claude-3-5-sonnet-latest
-  ```
+  必须**从 terminal** 启动 `python app.py`（不要从 Dock / Spotlight），保证 env 继承。详见 `~/claude-soul/protocols/secrets-management.md`。
 
 ### Critical Implementation Details
 
@@ -177,10 +184,11 @@ python claude_token_counter.py
    - 避免在翻译循环中使用 `time.sleep()`（会阻塞 eventlet）
    - 使用 `eventlet.sleep()` 或移除不必要延迟
 
-2. **Claude API 模型选择**
-   - 必须在 `translate_json_file_claude()` 调用时传递 `model` 参数
-   - 模型从前端表单 `request.form.get("claude_model")` 获取
-   - 每次 API 调用记录使用的模型：`logger.info(f"使用模型: {selected_model}")`
+2. **AI 模型选择**
+   - 必须在 `translate_json_file_llm()` 调用时传递 `model` 参数（OpenRouter slug 如 `anthropic/claude-sonnet-4.6`）
+   - 模型从前端表单 `request.form.get("ai_model")` 获取
+   - 每次 API 调用记录使用的模型：`logger.info(f"[OpenRouter] 调用 {model}")`
+   - 所有 3 档模型都需支持 `response_format: json_schema` —— Claude Sonnet 4.5+ / GPT-4o+ / Gemini 已确认支持
 
 3. **翻译质量保证**
    - 繁体中文（zh-TW）最容易出错，需特别检查
@@ -199,20 +207,19 @@ python claude_token_counter.py
    - 最终 ZIP: `output/translations_{filename}.zip`
    - 个别文件在打包后删除
 
-### Model Deprecation Notice
+### Model Currency Notice（2026-04-22 校准）
 
-⚠️ **重要通知**：根据 [Anthropic 官方废弃政策](https://docs.claude.com/en/docs/about-claude/model-deprecations)：
-- **claude-3-5-sonnet-20241022** 已被废弃，将于 **2025年10月22日** 退役
-- 官方推荐迁移到 **Claude Sonnet 4.5** (`claude-sonnet-4-5-20250929`)
-- 本项目已完全移除废弃模型，默认使用最新模型
+- **Claude 当前生产推荐**: Sonnet 4.6 (`anthropic/claude-sonnet-4.6` 经 OR) / Opus 4.7
+- **已变 legacy**: Sonnet 4.5 / Opus 4.5 / Opus 4.6（仍可用，有更优选）
+- **Anthropic 直连付款卡问题**：本项目不再调 Anthropic 直连 SDK；全部走 OpenRouter 统一入口
+- **OpenRouter 零加价** pass-through provider 原价（见 [openrouter.ai/pricing](https://openrouter.ai/pricing)）
 
 ### Common Development Tasks
 
-**添加新的 Claude 模型**:
-1. 在 `claude_token_counter.py` 的 `CLAUDE_PRICING` 添加定价
-2. 在 `claude_models.py` 的 `get_claude_models()` 和 `get_default_models()` 添加模型信息
-3. 更新 `config.py` 的 `CLAUDE_MODELS` 列表
-4. 更新 `templates/upload.html` 的 `loadDefaultModels()` 函数
+**添加新的 AI 模型**:
+1. 在 `llm_models.py` 的 `AVAILABLE_MODELS` 追加一条（含 id/name/tier/价格/context_length）
+2. 更新 `static/js/upload.js` 的 `loadDefaultModels()` fallback 列表（同步 3 档）
+3. 验证该模型支持 OpenRouter 的 `response_format: json_schema`（用 smoke test 跑一次）
 
 **修改批处理参数**:
 - 首选：创建 `translation_config.py` 并设置 `BATCH_CONFIG`
@@ -299,9 +306,10 @@ python claude_token_counter.py
 关键依赖（见 `requirements.txt`）：
 - Flask 3.1+ 和 Flask-SocketIO 5.5+
 - google-cloud-translate 3.20+
-- anthropic 0.39+ (Claude API)
+- **openai 1.50+**（OpenRouter 走 OpenAI 兼容层，替代 anthropic SDK）
+- **httpx[socks]**（上海走 clash SOCKS 代理需要）
 - eventlet 0.40+ (异步支持)
-- python-dotenv 1.0+ (环境变量)
+- 不再使用 python-dotenv（secrets.env + shell env 提供）
 
 ### Development Notes
 

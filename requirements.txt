@@ -5,11 +5,11 @@ Flask-SocketIO>=5.5.0
 # Google Cloud Translation API
 google-cloud-translate>=3.20.0
 
-# Claude API
-anthropic>=0.39.0
+# OpenRouter (via OpenAI-compatible SDK)
+openai>=1.50.0
 
-# Environment variables
-python-dotenv>=1.0.0
+# SOCKS proxy support for httpx (上海环境走 clash SOCKS)
+httpx[socks]>=0.27.0
 
 # Async support
 eventlet>=0.40.0

@@ -3,7 +3,7 @@
 /* global languages */
 
 let selectedLanguages = new Set();
-let claudeModels = [];  // 存储 Claude 模型列表
+let aiModels = [];  // 存储 AI 模型列表（OpenRouter 提供）
 
 // 工具函数：从 redirect_url 中提取 ZIP 文件路径
 function extractZipPath(redirectUrl) {
@@ -518,7 +518,7 @@ function updateSubmitButton() {
 
     // 显示/隐藏费用预估按钮
     const selectedEngine = document.querySelector('input[name="translation_engine"]:checked')?.value;
-    if (hasFile && hasLanguages && selectedEngine === 'claude') {
+    if (hasFile && hasLanguages && selectedEngine === 'openrouter') {
         estimateBtn.style.display = 'inline-block';
     } else {
         estimateBtn.style.display = 'none';
@@ -618,10 +618,10 @@ async function translateFile(fileItem) {
         const selectedEngine = document.querySelector('input[name="translation_engine"]:checked').value;
         formData.append('translation_engine', selectedEngine);
 
-        // 如果选择了 Claude，添加模型选择
-        if (selectedEngine === 'claude') {
-            const claudeModel = document.getElementById('claudeModel').value;
-            formData.append('claude_model', claudeModel);
+        // 如果选择了 OpenRouter AI，添加模型选择
+        if (selectedEngine === 'openrouter') {
+            const aiModel = document.getElementById('aiModel').value;
+            formData.append('ai_model', aiModel);
         }
 
         let checkCompleteInterval = null;
@@ -693,7 +693,7 @@ function selectEngine(element, engine) {
     
     // 显示或隐藏模型选择器
     const modelSelector = document.getElementById('modelSelector');
-    if (engine === 'claude') {
+    if (engine === 'openrouter') {
         modelSelector.classList.add('visible');
     } else {
         modelSelector.classList.remove('visible');
@@ -725,26 +725,17 @@ async function estimateCost() {
     });
     
     // 添加翻译引擎和模型
-    formData.append('translation_engine', 'claude');
-    const claudeModel = document.getElementById('claudeModel').value;
-    formData.append('claude_model', claudeModel);
-    
-    // 添加是否使用 API 计算
-    const useApiCount = document.getElementById('useApiCount').checked;
-    formData.append('use_api_count', useApiCount);
-    
+    formData.append('translation_engine', 'openrouter');
+    const aiModel = document.getElementById('aiModel').value;
+    formData.append('ai_model', aiModel);
+
     // 显示加载状态
     costEstimation.style.display = 'block';
-    estimationContent.innerHTML = '<div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i> 计算中...</div>';
+    const loadingSpinner = document.createElement('div');
+    loadingSpinner.className = 'loading-spinner';
+    loadingSpinner.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 计算中...';
+    estimationContent.replaceChildren(loadingSpinner);
     estimateBtn.disabled = true;
-    
-    // 根据计算方式更新提示
-    const warningDiv = document.querySelector('.estimation-warning span');
-    if (useApiCount) {
-        warningDiv.textContent = '使用 API 精确计算输入 tokens，输出 tokens 基于经验估算。';
-    } else {
-        warningDiv.textContent = '注意：此预估基于平均值计算，实际费用可能有 20-30% 的浮动，取决于内容复杂度和翻译质量。';
-    }
     
     try {
         const response = await fetch('/api/estimate-cost', {
@@ -770,11 +761,10 @@ async function estimateCost() {
 
 // 更新模型描述
 function updateModelDescription() {
-    const select = document.getElementById('claudeModel');
+    const select = document.getElementById('aiModel');
     const description = document.getElementById('modelDescription');
-    
-    // 从加载的模型列表中查找描述
-    const selectedModel = claudeModels.find(model => model.id === select.value);
+
+    const selectedModel = aiModels.find(model => model.id === select.value);
     if (selectedModel) {
         description.textContent = selectedModel.description;
     } else {
@@ -782,37 +772,16 @@ function updateModelDescription() {
     }
 }
 
-// 加载 Claude 模型列表
-async function loadClaudeModels() {
+// 加载 AI 模型列表（OpenRouter 3 档）
+async function loadAiModels() {
     try {
-        const response = await fetch('/api/claude-models');
+        const response = await fetch('/api/llm-models');
         const data = await response.json();
-        
+
         if (data.success && data.models) {
-            claudeModels = data.models;
-            const select = document.getElementById('claudeModel');
-            const description = document.getElementById('modelDescription');
-            
-            // 清空现有选项
-            select.innerHTML = '';
-            
-            // 添加模型选项
-            data.models.forEach((model, index) => {
-                const option = document.createElement('option');
-                option.value = model.id;
-                option.textContent = model.name;
-                if (index === 0) {
-                    option.selected = true;
-                }
-                select.appendChild(option);
-            });
-            
-            // 更新第一个模型的描述
-            if (data.models.length > 0) {
-                description.textContent = data.models[0].description;
-            }
+            aiModels = data.models;
+            renderAiModelOptions(data.models);
         } else {
-            // 如果加载失败，使用默认列表
             loadDefaultModels();
         }
     } catch (error) {
@@ -821,35 +790,38 @@ async function loadClaudeModels() {
     }
 }
 
-// 加载默认模型列表（备用）
-function loadDefaultModels() {
-    const defaultModels = [
-        { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5 ⭐', description: '最新最强模型（官方推荐）' },
-        { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4 ✨', description: '高智能平衡性能' },
-        { id: 'claude-3-5-sonnet-latest', name: 'Claude 3.5 Sonnet (Latest)', description: '自动更新到最新版本' },
-        { id: 'claude-opus-4-20250514', name: 'Claude Opus 4 ⚡', description: '超高智能，最复杂任务' },
-        { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', description: '快速且智能' },
-        { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', description: 'Claude 3 系列最强' },
-        { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', description: '经济快速' }
-    ];
-    
-    claudeModels = defaultModels;
-    const select = document.getElementById('claudeModel');
-    select.innerHTML = '';
-    
-    defaultModels.forEach((model, index) => {
+// 渲染模型下拉选项
+function renderAiModelOptions(models) {
+    const select = document.getElementById('aiModel');
+    const description = document.getElementById('modelDescription');
+
+    select.replaceChildren();
+    let defaultIndex = 0;
+    models.forEach((model, index) => {
         const option = document.createElement('option');
         option.value = model.id;
         option.textContent = model.name;
-        if (index === 0) {
-            option.selected = true;
+        if (model.default) {
+            defaultIndex = index;
         }
         select.appendChild(option);
     });
-    
-    if (defaultModels.length > 0) {
-        document.getElementById('modelDescription').textContent = defaultModels[0].description;
+    select.selectedIndex = defaultIndex;
+
+    if (models.length > 0) {
+        description.textContent = models[defaultIndex].description;
     }
+}
+
+// 默认模型列表（后端 /api/llm-models 不可用时兜底）
+function loadDefaultModels() {
+    const defaultModels = [
+        { id: 'anthropic/claude-sonnet-4.6', name: 'Claude Sonnet 4.6 ⭐', description: '质量档 — 翻译质量标杆，推荐生产默认', default: true },
+        { id: 'openai/gpt-5.4', name: 'GPT-5.4 ✨', description: '备选档 — 同价位替代方案，推理强' },
+        { id: 'google/gemini-3.1-flash-lite-preview', name: 'Gemini 3.1 Flash Lite 💰', description: '经济档 — 比 Sonnet 便宜 12x，适合大批量' }
+    ];
+    aiModels = defaultModels;
+    renderAiModelOptions(defaultModels);
 }
 
 // ========== 文件夹上传支持 ==========
@@ -966,8 +938,8 @@ window.addEventListener('load', () => {
     // 重置进度条颜色
     progressFill.style.background = 'linear-gradient(90deg, #4facfe, #00f2fe)';
 
-    // 加载 Claude 模型列表
-    loadClaudeModels();
+    // 加载 AI 模型列表
+    loadAiModels();
 
     // 设置文件夹 input
     setupFolderInput();

@@ -1,7 +1,7 @@
 # 翻译工具 (Translation Utility)
 
 ## 概述
-这是一个基于Flask的翻译应用，专门用于自动翻译JavaScript和JSON文件中的语言字符串。支持 Google Cloud Translation API 和 Claude API 双引擎，提供实时费用预估功能。
+这是一个基于 Flask 的翻译应用，专门用于自动翻译 JavaScript 和 JSON 文件中的语言字符串。支持 **Google Cloud Translation API** 和 **OpenRouter AI（Claude / GPT / Gemini 3 档模型）** 双引擎，使用 structured output (json_schema) 保证返回有效 JSON，提供实时费用预估功能。
 
 ## 功能特性
 - 🎯 **智能文件上传**：支持拖拽和点击上传，实时文件验证
@@ -13,14 +13,34 @@
 - 🚀 **异步处理**：AJAX提交，避免页面卡顿，流畅的用户体验
 - 📦 **批量输出**：一键下载包含所有语言的ZIP文件
 - 🎨 **现代化UI**：Material Design风格，优雅的动画效果
-- 💰 **费用预估**：Claude API 实时 token 计算和费用预估（支持美元/人民币）
-- 🤖 **多引擎支持**：Google Translate API 和 Claude API（支持多个模型）
+- 💰 **费用预估**：AI 翻译实时字符估算和费用预估（支持美元/人民币）
+- 🤖 **多引擎支持**：Google Translate API 和 OpenRouter AI（3 档模型：Claude Sonnet 4.6 / GPT-5.4 / Gemini Flash Lite）
 - 🚀 **用户体验**：智能表单验证，一键操作
 
 ## 系统要求
 - Python 3.8+ (推荐 Python 3.10+)
-- Google Cloud Translation API 凭证 或 Claude API Key
-- 稳定的网络连接
+- Google Cloud Translation API 凭证 **或** OpenRouter API Key
+- 稳定的网络连接（国内访问 openrouter.ai 建议挂代理）
+
+### OpenRouter API Key 配置（secrets SoT 模式）
+
+本项目**不使用** `.env` 文件管理 secrets。配置方式：
+
+```bash
+# 1. 创建或编辑 ~/.config/secrets.env（chmod 600，不进 git）
+echo 'export OPENROUTER_API_KEY="sk-or-v1-..."' >> ~/.config/secrets.env
+
+# 2. ~/.zshrc 末尾加入（已加过可跳）
+echo '[ -f ~/.config/secrets.env ] && source ~/.config/secrets.env' >> ~/.zshrc
+
+# 3. 重新 source 或开新 terminal
+source ~/.zshrc
+
+# 4. 验证
+echo ${OPENROUTER_API_KEY:0:12}  # 应输出 "sk-or-v1-xxx"
+```
+
+**必须从 terminal 启动 `python app.py`**（不要 Dock / Spotlight），GUI 启动不继承 shell env。
 
 ## 🚀 快速开始
 
@@ -113,23 +133,19 @@ python app.py            # 启动应用
 - 点击语言标签上的"×"可快速删除
 
 ### 4. 选择翻译引擎（可选）
-- **Google Translate**（默认）：免费额度内无需付费
-- **Claude API**：支持多个模型选择
-  - Claude Sonnet 4：$3/百万输入tokens，$15/百万输出tokens
-  - Claude Opus 4：$15/百万输入tokens，$75/百万输出tokens
-  - Claude 3.5 Sonnet：$3/百万输入tokens，$15/百万输出tokens
-  - 更多模型选项
+- **OpenRouter AI**（默认，推荐）：3 档 AI 模型，统一 OpenAI 兼容 API，零 markup 透传 provider 价格
+  - 质量档 ⭐：`anthropic/claude-sonnet-4.6` — $3/$15 per MTok（生产推荐）
+  - 备选档 ✨：`openai/gpt-5.4` — $2.50/$15 per MTok（同价位替代）
+  - 经济档 💰：`google/gemini-3.1-flash-lite-preview` — $0.25/$1.50 per MTok（比 Sonnet 便宜 12x）
+- **Google Translate**：免费额度内无需付费，作为 fallback
 
-### 5. 费用预估（仅限Claude API）
+### 5. 费用预估（仅限 OpenRouter 引擎）
 - 上传文件并选择语言后，点击"预估费用"按钮
-- 支持两种计算方式：
-  - **快速估算**：基于文件大小和经验系数（默认）
-  - **API精确计算**：使用Claude API计算实际tokens（更准确）
-- 显示详细费用明细：
-  - 输入/输出tokens数量
+- 基于字符数估算，显示详细费用明细：
+  - 输入/输出 tokens 数量
   - 各部分费用（美元/人民币）
   - 批处理信息
-- 准确度：单语言翻译约94%准确，多语言翻译约78%准确
+- 典型误差 20-30%（OpenRouter 不代理 count_tokens API，仅字符估算）
 
 ### 6. 开始翻译
 - 选择文件和目标语言后，"开始翻译"按钮自动启用
@@ -183,9 +199,10 @@ translation-app/
 ├── config.py             # 配置文件
 ├── test_credentials.py   # 凭证测试脚本
 ├── check_api_status.py   # API状态检查工具
-├── translate_claude.py   # Claude API翻译模块
-├── claude_token_counter.py # Claude token计算和费用预估
-├── claude_models.py      # Claude模型配置管理
+├── translate_llm.py      # OpenRouter AI 翻译模块
+├── llm_client.py         # OpenRouter 客户端层（OpenAI SDK + json_schema）
+├── cost_estimator.py     # 费用估算（字符数）
+├── llm_models.py         # AI 模型目录（3 档：Claude/GPT/Gemini）
 ├── split_json.py         # JSON文件分割工具
 ├── example.json          # 示例JSON文件用于测试
 ├── test-small.json       # 小型测试文件
@@ -234,7 +251,7 @@ translation-app/
 ### 🆘 更多帮助
 - **API使用建议**：查看 `API_USAGE_TIPS.md`
 - **计费问题排查**：查看 `BILLING_TROUBLESHOOTING.md`
-- **使用Claude API**：查看 `CLAUDE_API_SETUP.md`
+- **OpenRouter AI 配置**：见 [openrouter.ai/docs](https://openrouter.ai/docs)
 - **创建新项目**：查看 `CREATE_NEW_PROJECT.md`
 
 ## 🔧 开发相关

@@ -1,9 +1,9 @@
 # app.py
 
 from translate import translate_text, translate_file, create_zip, create_zip_with_structure
-from translate_claude import translate_json_file_claude, translate_js_file_claude
-from claude_models import get_claude_models
-from claude_token_counter import count_tokens_for_translation, count_tokens_with_api, format_cost_summary
+from translate_llm import translate_json_file_llm, translate_js_file_llm
+from llm_models import get_models
+from cost_estimator import estimate_cost, format_cost_summary
 from flask import Flask, request, render_template, send_from_directory, flash, redirect, jsonify
 import logging
 from werkzeug.utils import secure_filename
@@ -32,10 +32,43 @@ UPLOAD_FOLDER = "uploads"
 OUTPUT_FOLDER = "output"
 ALLOWED_EXTENSIONS = {"json", "js", "zip"}
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "./serviceKey.json"
 
-# Google Translate Client
-translate_client = translate.Client()
+# Google Translate Client —— lazy init，serviceKey.json 缺失时降级到 fallback 语言列表
+# 这样 OpenRouter 引擎路径不受 Google 凭证影响，独立可用
+_translate_client = None
+
+
+def _get_translate_client():
+    global _translate_client
+    if _translate_client is None:
+        os.environ.setdefault("GOOGLE_APPLICATION_CREDENTIALS", "./serviceKey.json")
+        _translate_client = translate.Client()
+    return _translate_client
+
+
+# 无 Google 凭证时的 fallback 语言列表（覆盖常见 UI 翻译场景）
+_FALLBACK_LANGUAGES = [
+    {"name": "English", "code": "en"},
+    {"name": "Chinese (Simplified)", "code": "zh"},
+    {"name": "Chinese (Traditional)", "code": "zh-TW"},
+    {"name": "Spanish", "code": "es"},
+    {"name": "French", "code": "fr"},
+    {"name": "German", "code": "de"},
+    {"name": "Italian", "code": "it"},
+    {"name": "Portuguese", "code": "pt"},
+    {"name": "Arabic", "code": "ar"},
+    {"name": "Japanese", "code": "ja"},
+    {"name": "Korean", "code": "ko"},
+    {"name": "Russian", "code": "ru"},
+    {"name": "Dutch", "code": "nl"},
+    {"name": "Polish", "code": "pl"},
+    {"name": "Turkish", "code": "tr"},
+    {"name": "Vietnamese", "code": "vi"},
+    {"name": "Thai", "code": "th"},
+    {"name": "Indonesian", "code": "id"},
+    {"name": "Hindi", "code": "hi"},
+    {"name": "Malay", "code": "ms"},
+]
 
 # Cache setup
 LAST_CACHED = datetime.datetime.now()
@@ -43,17 +76,20 @@ LAST_CACHED = datetime.datetime.now()
 
 @lru_cache(maxsize=None)
 def get_supported_languages():
-    # now = datetime.datetime.now()
-    print("Fetching supported languages...")
-
+    """返回支持的语言列表。有 Google 凭证时拉 193 种，否则返回 20 种 fallback。"""
     try:
-        languages = translate_client.get_languages()
+        languages = _get_translate_client().get_languages()
+        return [{"name": lang["name"], "code": lang["language"]} for lang in languages]
+    except FileNotFoundError:
+        logger.warning("serviceKey.json 不存在，使用 fallback 语言列表（20 种常用语言）")
+        return _FALLBACK_LANGUAGES
     except RefreshError as e:
-        logging.error("Token refresh error: %s", str(e))
-        flash("There was an issue with authentication. Please try again later.")
-        return []
-
-    return [{"name": lang["name"], "code": lang["language"]} for lang in languages]
+        logger.error("Google Translate token refresh 失败: %s", e)
+        flash("Google 凭证刷新失败，使用默认语言列表")
+        return _FALLBACK_LANGUAGES
+    except Exception as e:
+        logger.warning(f"Google Translate 客户端初始化失败 ({type(e).__name__})，使用 fallback 语言列表")
+        return _FALLBACK_LANGUAGES
 
 
 def allowed_file(filename):
@@ -126,32 +162,32 @@ def success_page():
     return render_template("success.html", zip_path=zip_path)
 
 
-@app.route("/api/claude-models")
-def get_claude_models_api():
-    """API 端点：获取可用的 Claude 模型列表"""
+@app.route("/api/llm-models")
+def get_llm_models_api():
+    """API 端点：获取可用的 AI 模型列表（OpenRouter 3 档）"""
     try:
-        models = get_claude_models()
+        models = get_models()
         return jsonify({"success": True, "models": models})
     except Exception as e:
         logging.error(f"获取模型列表失败: {e}")
         return jsonify({"success": False, "error": str(e), "models": []})
 
 
-def translate_single_file(file_path, target_language, translation_engine, claude_model, output_dir, progress_callback=None):
+def translate_single_file(file_path, target_language, translation_engine, ai_model, output_dir, progress_callback=None):
     """
     翻译单个文件
     返回: (输出文件名, 输出文件完整路径)
     """
     file_extension = os.path.splitext(file_path)[1].lower()
 
-    if translation_engine == "claude":
+    if translation_engine == "openrouter":
         if file_extension == ".json":
-            output_file_name = translate_json_file_claude(
-                file_path, target_language, progress_callback, claude_model, output_dir
+            output_file_name = translate_json_file_llm(
+                file_path, target_language, progress_callback, ai_model, output_dir
             )
         elif file_extension == ".js":
-            output_file_name = translate_js_file_claude(
-                file_path, target_language, progress_callback, claude_model, output_dir
+            output_file_name = translate_js_file_llm(
+                file_path, target_language, progress_callback, ai_model, output_dir
             )
         else:
             raise ValueError(f"不支持的文件类型: {file_extension}")
@@ -163,7 +199,7 @@ def translate_single_file(file_path, target_language, translation_engine, claude
     return output_file_name, os.path.join(output_dir, output_file_name)
 
 
-def process_zip_archive(zip_path, target_languages, translation_engine, claude_model, output_dir, base_name, timestamp, unique_id):
+def process_zip_archive(zip_path, target_languages, translation_engine, ai_model, output_dir, base_name, timestamp, unique_id):
     """
     处理 ZIP 压缩包：解压、翻译所有文件、保持目录结构打包
     返回: (zip_name, zip_path) 或 None
@@ -238,7 +274,7 @@ def process_zip_archive(zip_path, target_languages, translation_engine, claude_m
 
                     # 翻译文件
                     output_file_name, output_file_path = translate_single_file(
-                        full_path, target_language, translation_engine, claude_model,
+                        full_path, target_language, translation_engine, ai_model,
                         file_output_dir, progress_callback
                     )
 
@@ -334,15 +370,15 @@ def translate_file_route():
         # Get translation engine from form or use default
         translation_engine = request.form.get("translation_engine", TRANSLATION_ENGINE)
 
-        # Get Claude model if using Claude
-        claude_model = request.form.get("claude_model", config.CLAUDE_MODEL)
+        # Get AI model if using OpenRouter
+        ai_model = request.form.get("ai_model", config.DEFAULT_MODEL)
 
         # ========== ZIP 文件处理 ==========
         if is_zip_file(original_filename):
             try:
                 zip_name, zip_path = process_zip_archive(
                     saved_file_path, target_languages, translation_engine,
-                    claude_model, output_dir, base_name, timestamp, unique_id
+                    ai_model, output_dir, base_name, timestamp, unique_id
                 )
 
                 # 清理
@@ -410,7 +446,7 @@ def translate_file_route():
 
                 output_file_name, output_file_path = translate_single_file(
                     saved_file_path, target_language, translation_engine,
-                    claude_model, output_dir, progress_callback
+                    ai_model, output_dir, progress_callback
                 )
                 output_files.append(output_file_path)
                 print(
@@ -519,78 +555,49 @@ def translate_file_route():
 
 
 @app.route("/api/estimate-cost", methods=["POST"])
-def estimate_cost():
-    """估算翻译成本"""
+def estimate_cost_route():
+    """估算翻译成本（字符数估算，仅 OpenRouter 引擎）"""
     try:
-        # 检查文件
         if "file" not in request.files:
             return jsonify({"error": "未上传文件"}), 400
-        
+
         file = request.files["file"]
         if not file or not allowed_file(file.filename):
             return jsonify({"error": "无效的文件类型"}), 400
-        
-        # 获取参数
+
         target_languages = request.form.getlist("languages")
-        translation_engine = request.form.get("translation_engine", "google")
-        claude_model = request.form.get("claude_model", config.CLAUDE_MODEL)
-        
+        translation_engine = request.form.get("translation_engine", "openrouter")
+        ai_model = request.form.get("ai_model", config.DEFAULT_MODEL)
+
         if not target_languages:
             return jsonify({"error": "未选择目标语言"}), 400
-        
-        # 如果不是 Claude，返回免费信息
-        if translation_engine != "claude":
+
+        # Google Translate: 费用由 Google Cloud 账户管理，不做应用层估算
+        if translation_engine != "openrouter":
             return jsonify({
                 "engine": "google",
-                "message": "Google Translate API 费用取决于您的 Google Cloud 账户设置",
-                "estimated_cost": "请查看 Google Cloud Console 了解定价"
+                "message": "Google Translate API 费用由您的 Google Cloud 账户管理",
+                "estimated_cost": "请查看 Google Cloud Console"
             })
-        
-        # 保存临时文件
+
+        # 保存临时文件并估算
         import tempfile
         with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp_file:
             file.save(tmp_file.name)
-            
-            # 获取计算方式（默认使用估算）
-            use_api_count = request.form.get("use_api_count", "false") == "true"
-            
-            if use_api_count and config.CLAUDE_API_KEY:
-                # 使用 API 精确计算
-                logger.info(f"使用 Claude API 计算 tokens, 模型: {claude_model}")
-                logger.info(f"目标语言: {target_languages}")
-                token_info = count_tokens_with_api(
-                    tmp_file.name, 
-                    target_languages, 
-                    claude_model
-                )
-                if not token_info:
-                    # 如果 API 计算失败，回退到估算
-                    logger.warning("API 计算失败，使用估算方法")
-                    token_info = count_tokens_for_translation(
-                        tmp_file.name, 
-                        target_languages, 
-                        claude_model
-                    )
-            else:
-                # 使用估算方法
-                token_info = count_tokens_for_translation(
-                    tmp_file.name, 
-                    target_languages, 
-                    claude_model
-                )
-            
-            # 删除临时文件
+            token_info = estimate_cost(tmp_file.name, target_languages, ai_model)
             os.unlink(tmp_file.name)
-        
-        # 返回预估信息
+
+        if "error" in token_info:
+            return jsonify({"success": False, "error": token_info["error"]}), 500
+
         return jsonify({
             "success": True,
-            "engine": "claude",
+            "engine": "openrouter",
             "model": token_info.get("model_name", "Unknown"),
             "estimation": token_info,
             "formatted_summary": format_cost_summary(token_info)
         })
-        
+
     except Exception as e:
         logger.error(f"费用预估失败: {e}")
         return jsonify({"error": str(e)}), 500
@@ -611,8 +618,9 @@ if __name__ == "__main__":
     print("=" * 50)
     print("🚀 翻译应用启动中...")
     print(f"📊 默认翻译引擎: {TRANSLATION_ENGINE}")
-    if TRANSLATION_ENGINE == "claude" or config.CLAUDE_API_KEY:
-        print(f"🤖 Claude 模型: {config.CLAUDE_MODEL}")
+    if TRANSLATION_ENGINE == "openrouter" or config.OPENROUTER_API_KEY:
+        print(f"🤖 默认 AI 模型: {config.DEFAULT_MODEL}")
+        print(f"🔑 OpenRouter API Key: {'✅ 已配置' if config.OPENROUTER_API_KEY else '❌ 未配置'}")
     print("=" * 50)
     
     app.run(debug=True, host="127.0.0.1", port=5000)

@@ -37,7 +37,8 @@ TEMPERATURE_BY_LANGUAGE = {
 # 输出验证强度
 VALIDATION_STRENGTH = {
     'zh-TW': 'strict',    # 严格验证，避免英文混入
-    'zh-Hant': 'strict',  
+    'zh-Hant': 'strict',
+    'ar':    'strict',    # 阿拉伯语最易返英文/拉丁字母，严查
     'es': 'moderate',     # 中度验证
     'fr': 'moderate',
     'pt': 'moderate',
@@ -106,7 +107,37 @@ TERM_GLOSSARY = {
         '设置': '設定',
         '搜索': '搜尋',
         '刷新': '重新整理',
-    }
+    },
+    'it': {
+        '确定': 'conferma',
+        '取消': 'annulla',
+        '保存': 'salva',
+        '编辑': 'modifica',
+        '删除': 'elimina',
+        '设置': 'impostazioni',
+        '搜索': 'cerca',
+        '刷新': 'aggiorna',
+    },
+    'pt': {
+        '确定': 'confirmar',
+        '取消': 'cancelar',
+        '保存': 'salvar',
+        '编辑': 'editar',
+        '删除': 'excluir',
+        '设置': 'configurações',
+        '搜索': 'pesquisar',
+        '刷新': 'atualizar',
+    },
+    'ar': {
+        '确定': 'تأكيد',
+        '取消': 'إلغاء',
+        '保存': 'حفظ',
+        '编辑': 'تعديل',
+        '删除': 'حذف',
+        '设置': 'الإعدادات',
+        '搜索': 'بحث',
+        '刷新': 'تحديث',
+    },
 }
 
 # 质量检查规则
