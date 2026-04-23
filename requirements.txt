@@ -11,8 +11,8 @@ openai>=1.50.0
 # SOCKS proxy support for httpx (上海环境走 clash SOCKS)
 httpx[socks]>=0.27.0
 
-# Async support
-eventlet>=0.40.0
+# Async support: Flask-SocketIO async_mode='threading' (stdlib，无需 eventlet/gevent)
+# 参见 Miguel Grinberg 当前推荐：github.com/miguelgrinberg/Flask-SocketIO/discussions/2037
 
 # Core dependencies (automatically installed with above packages)
 google-api-core>=2.24.0
@@ -28,7 +28,6 @@ protobuf>=6.31.0
 requests>=2.32.0
 urllib3>=2.4.0
 dnspython>=2.7.0
-greenlet>=3.2.0
 
 # Template engine and utilities
 Jinja2>=3.1.0

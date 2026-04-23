@@ -56,7 +56,7 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
    - Socket.IO 实时通信（`/test` namespace）
    - 路由: `/` (上传), `/translate` (处理), `/success` (结果)
    - API 端点: `/api/claude-models`, `/api/estimate-cost`
-   - 使用 `eventlet` 异步模式支持 WebSocket
+   - 使用 `threading` 异步模式（stdlib，Miguel Grinberg 当前推荐姿势）
 
 2. **translate.py** - Google Translate 引擎
    - 嵌套 JSON 结构处理，保留格式和占位符
@@ -180,9 +180,10 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
 ### Critical Implementation Details
 
 1. **Socket.IO 异步模式**
-   - 使用 `eventlet` 而非 `threading`
-   - 避免在翻译循环中使用 `time.sleep()`（会阻塞 eventlet）
-   - 使用 `eventlet.sleep()` 或移除不必要延迟
+   - `async_mode='threading'`（`app.py:28`）走 Python stdlib 线程池
+   - 对第三方 SDK（google-cloud / openai SDK）兼容性最好，无 monkey-patch 副作用
+   - 本地单用户翻译场景足够；如未来扩展多用户 + 高并发 WebSocket，Miguel 推荐 `gevent`（非 eventlet，后者已 deprecated）
+   - 参考：[Flask-SocketIO Discussion #2037](https://github.com/miguelgrinberg/Flask-SocketIO/discussions/2037)
 
 2. **AI 模型选择**
    - 必须在 `translate_json_file_llm()` 调用时传递 `model` 参数（OpenRouter slug 如 `anthropic/claude-sonnet-4.6`）
@@ -286,7 +287,7 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
 
 4. **Socket.IO 连接断开**:
    - 问题：长时间翻译任务超时
-   - 解决：使用 eventlet 模式，避免阻塞操作
+   - 解决：检查 Socket.IO 心跳参数（`ping_timeout` / `ping_interval`），确保翻译循环 yield 控制权
 
 ### Documentation References
 
@@ -308,7 +309,7 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
 - google-cloud-translate 3.20+
 - **openai 1.50+**（OpenRouter 走 OpenAI 兼容层，替代 anthropic SDK）
 - **httpx[socks]**（上海走 clash SOCKS 代理需要）
-- eventlet 0.40+ (异步支持)
+- async 模式：Flask-SocketIO `async_mode='threading'`（stdlib 线程池，不依赖 eventlet/gevent）
 - 不再使用 python-dotenv（secrets.env + shell env 提供）
 
 ### Development Notes

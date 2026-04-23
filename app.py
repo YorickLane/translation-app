@@ -19,7 +19,6 @@ from time import sleep
 from config import SECRET_KEY, TRANSLATION_ENGINE
 import config
 from google.auth.exceptions import RefreshError
-import eventlet
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
@@ -399,7 +398,7 @@ def translate_file_route():
                     namespace="/test",
                 )
 
-                eventlet.sleep(0.5)
+                sleep(0.5)
                 return "", 200
 
             except Exception as e:
@@ -544,7 +543,7 @@ def translate_file_route():
         )
 
         # 给客户端一点时间处理完成信号
-        eventlet.sleep(0.5)
+        sleep(0.5)
 
         return "", 200  # 返回空响应，让客户端处理跳转
 
