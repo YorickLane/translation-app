@@ -17,6 +17,7 @@ import re
 
 from llm_client import translate_batch
 from config import BATCH_SIZE, REQUEST_DELAY, MAX_RETRIES, DEFAULT_MODEL
+from translation_config import QUALITY_CHECK_RULES
 
 try:
     from translation_config import (
@@ -104,16 +105,14 @@ GENERIC_RULE = (
 
 # ---------- English 混入检测（非英语目标触发重试） ----------
 
-_ENGLISH_KEYWORDS = {
-    'Please', 'Enter', 'Select', 'Password', 'Login',
-    'Settings', 'Edit', 'Delete', 'Clear', 'Copy',
-    'Download', 'Upload', 'Cancel', 'Confirm', 'Save',
-    'verification', 'progress', 'merchant', 'payment',
-}
 _ENGLISH_PATTERN = re.compile(r'[A-Za-z]{3,}')
 # 词边界匹配，避免把罗曼语系同源词（cancelar/confirmar/editar/copiar 等）误判为英文混入
+# SoT: translation_config.QUALITY_CHECK_RULES['english_keywords']
+# (同一份 list 也被 translation_postprocess.contains_english_keywords 用;
+# 以前这里有本地 _ENGLISH_KEYWORDS 副本 2026-04-23 合并, work_philosophy §7)
 _ENGLISH_KEYWORD_PATTERNS = [
-    re.compile(rf'\b{re.escape(w)}\b', re.IGNORECASE) for w in _ENGLISH_KEYWORDS
+    re.compile(rf'\b{re.escape(w)}\b', re.IGNORECASE)
+    for w in QUALITY_CHECK_RULES['english_keywords']
 ]
 
 

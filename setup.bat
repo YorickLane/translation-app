@@ -33,13 +33,20 @@ echo 📥 安装项目依赖...
 pip install -r requirements.txt
 
 REM 检查Google Cloud凭证（可选 — 语言列表 + 回退引擎）
+REM 查找顺序: GOOGLE_APPLICATION_CREDENTIALS env → google-credentials.json → serviceKey.json (legacy) → gcloud ADC
 echo.
 echo 🔑 检查Google Cloud凭证（可选）...
-if not exist "serviceKey.json" (
-    echo ℹ️  未找到 serviceKey.json（可选 — LLM 引擎不需要）
-    echo    如需 Google Translate 作为回退或获取完整语言列表，请参见 README.md
+set "CRED_FILE="
+if defined GOOGLE_APPLICATION_CREDENTIALS if exist "%GOOGLE_APPLICATION_CREDENTIALS%" set "CRED_FILE=%GOOGLE_APPLICATION_CREDENTIALS% (env)"
+if not defined CRED_FILE if exist "google-credentials.json" set "CRED_FILE=google-credentials.json"
+if not defined CRED_FILE if exist "serviceKey.json" set "CRED_FILE=serviceKey.json (legacy)"
+if not defined CRED_FILE if exist "%APPDATA%\gcloud\application_default_credentials.json" set "CRED_FILE=gcloud ADC"
+
+if not defined CRED_FILE (
+    echo ℹ️  未找到 Google 凭证（可选 — LLM 引擎不需要）
+    echo    如需 Google Translate 作为回退或获取完整语言列表，参见 README.md
 ) else (
-    echo ✅ 找到 serviceKey.json，验证凭证...
+    echo ✅ 找到凭证: %CRED_FILE%，验证...
     python -c "from google.cloud import translate_v2 as translate; c=translate.Client(); langs=c.get_languages(); print(f'✅ Google 凭证有效，拉到 {len(langs)} 种语言')"
 )
 

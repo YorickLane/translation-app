@@ -19,14 +19,25 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Lazy-init Google Translate client —— 只在真正使用 Google 引擎时初始化，
-# 保证项目在无 serviceKey.json 时也能启动（仅 OpenRouter 引擎可用）
+# 保证项目在无 Google 凭证时也能启动（仅 OpenRouter 引擎可用）
 _translate_client = None
 
 
 def _get_translate_client():
+    """查找 Google 凭证并 init client。查找优先级见 config.GOOGLE_CREDENTIALS_FILENAMES。"""
     global _translate_client
     if _translate_client is None:
-        os.environ.setdefault("GOOGLE_APPLICATION_CREDENTIALS", "./serviceKey.json")
+        from config import GOOGLE_CREDENTIALS_FILENAMES
+        # 未显式设 env → 尝试项目根的 fallback 文件 (优先新名字)
+        if not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+            project_dir = os.path.dirname(os.path.abspath(__file__))
+            for fname in GOOGLE_CREDENTIALS_FILENAMES:
+                candidate = os.path.join(project_dir, fname)
+                if os.path.isfile(candidate):
+                    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = candidate
+                    break
+        # 如果都没找到 env 仍为空，google-cloud 会自动走 gcloud ADC / metadata
+        # (~/.config/gcloud/application_default_credentials.json → GCE/Cloud Run metadata)
         _translate_client = translate.Client()
     return _translate_client
 

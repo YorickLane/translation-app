@@ -13,12 +13,32 @@ REM 激活虚拟环境
 echo 🔄 激活虚拟环境...
 call venv\Scripts\activate.bat
 
-REM 检查serviceKey.json
-if not exist "serviceKey.json" (
-    echo ⚠️  未找到serviceKey.json文件
-    echo 请按照README.md中的说明配置Google Cloud凭证
+REM 凭证检查（OpenRouter 或 Google 至少一个，和 start.sh 行为一致）
+set "has_or=0"
+set "has_google=0"
+if defined OPENROUTER_API_KEY set "has_or=1"
+if defined GOOGLE_APPLICATION_CREDENTIALS if exist "%GOOGLE_APPLICATION_CREDENTIALS%" set "has_google=1"
+if not "%has_google%"=="1" if exist "google-credentials.json" set "has_google=1"
+if not "%has_google%"=="1" if exist "serviceKey.json" set "has_google=1"
+if not "%has_google%"=="1" if exist "%APPDATA%\gcloud\application_default_credentials.json" set "has_google=1"
+
+if "%has_or%"=="0" if "%has_google%"=="0" (
+    echo ❌ 未检测到任何翻译引擎凭证，至少需要一个:
+    echo    • OpenRouter: set OPENROUTER_API_KEY=sk-or-v1-...
+    echo    • Google Translate:
+    echo       - 项目根放 google-credentials.json
+    echo       - 或 set GOOGLE_APPLICATION_CREDENTIALS=path\to\key.json
+    echo       - 或 gcloud auth application-default login
+    echo    详见 README.md
     pause
     exit /b 1
+)
+
+if "%has_or%"=="1" echo ✅ OpenRouter LLM 引擎可用（主引擎）
+if "%has_google%"=="1" (
+    echo ✅ Google Translate 可用（完整语言列表 + 回退引擎）
+) else (
+    echo ⚠️  无 Google 凭证 — 语言列表降级到 20 种 fallback，Google 引擎不可用
 )
 
 REM 启动应用

@@ -89,13 +89,16 @@ pip install -r requirements.txt
 1. 在 Google Cloud Console 创建项目
 2. 启用 Cloud Translation API
 3. 创建 service account 并授予 `roles/cloudtranslate.user` role
-4. 下载 JSON key 文件，重命名为 `serviceKey.json` 放项目根目录
+4. 下载 JSON key 文件 —— app 按以下顺序查找，任选一条配置：
+   - **a. 项目根 `google-credentials.json`**（推荐，legacy `serviceKey.json` 仍兼容）
+   - **b. `GOOGLE_APPLICATION_CREDENTIALS` env var** 指向 key 文件绝对路径
+   - **c. gcloud ADC**：`gcloud auth application-default login` 一次即可（最干净，无 key 文件管理）
 
-无 `serviceKey.json` 时：app 自动使用内置 20 种常用语言 fallback，Google 引擎不可用但 LLM 引擎正常。
+无任何 Google 凭证时：app 自动使用内置 20 种常用语言 fallback，Google 引擎不可用但 LLM 引擎正常。
 
 #### 5. 验证配置
 ```bash
-# Google 凭证（若有 serviceKey.json）
+# Google 凭证（若 a/b/c 任一配好）
 python -c "from google.cloud import translate_v2 as translate; c=translate.Client(); print(f'✅ 拉到 {len(c.get_languages())} 种语言')"
 
 # OpenRouter
@@ -218,7 +221,7 @@ translation-app/
 ├── example.json          # 示例JSON文件用于测试
 ├── test-small.json       # 小型测试文件
 ├── requirements.txt      # Python依赖包列表
-├── serviceKey.json       # Google Cloud 凭证（可选，见第 4 节）
+├── google-credentials.json # Google Cloud 凭证（可选，见第 4 节；legacy: serviceKey.json）
 ├── setup.sh              # 一键安装脚本（macOS/Linux）
 ├── setup.bat             # 一键安装脚本（Windows）
 ├── start.sh              # 应用启动脚本（macOS/Linux）
@@ -237,13 +240,13 @@ translation-app/
 ## ⚠️ 注意事项
 
 ### 安全提醒
-- **保护密钥文件**：不要将 `serviceKey.json` 提交到Git仓库
+- **保护密钥文件**：不要将 `google-credentials.json` / `serviceKey.json` 提交到 Git 仓库（`.gitignore` 已挡）
 - **虚拟环境**：建议使用虚拟环境避免依赖冲突
 - **API配额**：注意Google Translation API的使用配额和计费
 
 ### 常见问题
 1. **模块未找到错误**：确保已激活虚拟环境并安装所有依赖
-2. **认证错误**：检查 `serviceKey.json` 文件是否存在且有效
+2. **认证错误**：检查 `google-credentials.json` / `serviceKey.json` 文件是否存在且有效，或 `GOOGLE_APPLICATION_CREDENTIALS` env 指向的路径
 3. **API错误**：确认Google Cloud项目已启用Translation API
 4. **界面显示异常**：确保浏览器支持现代CSS特性，建议使用Chrome/Firefox/Safari
 5. **文件上传失败**：检查文件格式是否为.js或.json，文件大小是否合理
@@ -254,7 +257,7 @@ translation-app/
 1. 确认Python版本 >= 3.8（推荐 3.10+）
 2. 确认虚拟环境已激活
 3. 确认所有依赖包已安装
-4. 确认至少一个翻译引擎凭证就位（`$OPENROUTER_API_KEY` 或 `serviceKey.json`）
+4. 确认至少一个翻译引擎凭证就位（`$OPENROUTER_API_KEY` 或 Google 凭证三条路任一）
 5. 若使用 Google 引擎：确认 Cloud Translation API 已启用 + 计费正常
 
 ### 🆘 更多帮助

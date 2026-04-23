@@ -158,7 +158,7 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
   - `OPENROUTER_API_KEY`: 从 shell env 读取，来源 `~/.config/secrets.env`（详见 `~/claude-soul/protocols/secrets-management.md`）
   - `DEFAULT_MODEL`: 默认 `'anthropic/claude-sonnet-4.6'`
   - `BATCH_SIZE`, `REQUEST_DELAY`, `MAX_RETRIES`
-  - Google credentials: `./serviceKey.json`
+  - Google credentials: 查找顺序 `GOOGLE_APPLICATION_CREDENTIALS` env → gcloud ADC → `./google-credentials.json` → `./serviceKey.json` (legacy)
 
 - **translation_config.py** (可选高级配置):
   - `BATCH_CONFIG`: 覆盖批处理参数
@@ -263,7 +263,7 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
 ### Security Considerations
 
 - **永远不要提交**:
-  - `serviceKey.json` (Google credentials)
+  - `google-credentials.json` / `serviceKey.json` (Google credentials)
   - `.env` 文件（包含 API keys）
   - `uploads/` 和 `output/` 中的临时文件
 

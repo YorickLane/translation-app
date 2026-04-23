@@ -16,9 +16,11 @@ venv/
 env/
 ENV/
 
-# Google Cloud Credentials
+# Google Cloud Credentials (推荐: google-credentials.json; legacy: serviceKey.json)
+google-credentials.json
 serviceKey.json
 *.json
+.vscode/google-credentials.json
 .vscode/serviceKey.json
 
 # Application specific

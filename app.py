@@ -32,15 +32,25 @@ OUTPUT_FOLDER = "output"
 ALLOWED_EXTENSIONS = {"json", "js", "zip"}
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
-# Google Translate Client —— lazy init，serviceKey.json 缺失时降级到 fallback 语言列表
+# Google Translate Client —— lazy init，凭证缺失时降级到 fallback 语言列表
 # 这样 OpenRouter 引擎路径不受 Google 凭证影响，独立可用
 _translate_client = None
 
 
 def _get_translate_client():
+    """查找 Google 凭证并 init client。查找优先级见 config.GOOGLE_CREDENTIALS_FILENAMES。"""
     global _translate_client
     if _translate_client is None:
-        os.environ.setdefault("GOOGLE_APPLICATION_CREDENTIALS", "./serviceKey.json")
+        from config import GOOGLE_CREDENTIALS_FILENAMES
+        # 未显式设 env → 尝试项目根的 fallback 文件 (优先新名字)
+        if not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+            project_dir = os.path.dirname(os.path.abspath(__file__))
+            for fname in GOOGLE_CREDENTIALS_FILENAMES:
+                candidate = os.path.join(project_dir, fname)
+                if os.path.isfile(candidate):
+                    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = candidate
+                    break
+        # env 仍空时 google-cloud 自动走 gcloud ADC / metadata
         _translate_client = translate.Client()
     return _translate_client
 
@@ -80,7 +90,11 @@ def get_supported_languages():
         languages = _get_translate_client().get_languages()
         return [{"name": lang["name"], "code": lang["language"]} for lang in languages]
     except FileNotFoundError:
-        logger.warning("serviceKey.json 不存在，使用 fallback 语言列表（20 种常用语言）")
+        logger.warning(
+            "无 Google 凭证 (未设 GOOGLE_APPLICATION_CREDENTIALS / 无 gcloud ADC / "
+            "项目根无 google-credentials.json 或 serviceKey.json)，"
+            "使用 fallback 语言列表（20 种常用语言）"
+        )
         return _FALLBACK_LANGUAGES
     except RefreshError as e:
         logger.error("Google Translate token refresh 失败: %s", e)

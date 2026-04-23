@@ -16,7 +16,15 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "change-me-in-production")
 TRANSLATION_ENGINE = os.environ.get("TRANSLATION_ENGINE", "openrouter")
 
 # Google Cloud Translate 凭证（仅 google 引擎需要）
-GOOGLE_APPLICATION_CREDENTIALS = "./serviceKey.json"
+# 查找优先级 (google-cloud library 原生链):
+#   1. GOOGLE_APPLICATION_CREDENTIALS env var (可从 ~/.config/secrets.env 设置)
+#   2. gcloud ADC (`gcloud auth application-default login` 后
+#      ~/.config/gcloud/application_default_credentials.json)
+#   3. GCE / Cloud Run metadata server (云环境自动)
+#   4. 项目根 fallback convention:
+#      - google-credentials.json (2026-04-23 后推荐)
+#      - serviceKey.json (legacy, 向后兼容保留)
+GOOGLE_CREDENTIALS_FILENAMES = ("google-credentials.json", "serviceKey.json")
 
 # OpenRouter API Key —— 走 shell env，来源 ~/.config/secrets.env
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
