@@ -28,7 +28,7 @@ start.bat               # Windows
 source venv/bin/activate
 python app.py
 
-# Application runs on http://127.0.0.1:5000/
+# Application runs on http://127.0.0.1:5050/ (改自 5000 以避开 macOS AirPlay)
 ```
 
 ### Testing and Validation

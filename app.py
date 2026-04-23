@@ -613,13 +613,33 @@ def test_disconnect():
 
 
 if __name__ == "__main__":
-    # 显示当前配置
+    import errno
+    import sys
+
+    # 默认端口避开 macOS AirPlay Receiver（占 *:5000 / *:7000）
+    PORT = 5050
+
     print("=" * 50)
     print("🚀 翻译应用启动中...")
     print(f"📊 默认翻译引擎: {TRANSLATION_ENGINE}")
     if TRANSLATION_ENGINE == "openrouter" or config.OPENROUTER_API_KEY:
         print(f"🤖 默认 AI 模型: {config.DEFAULT_MODEL}")
         print(f"🔑 OpenRouter API Key: {'✅ 已配置' if config.OPENROUTER_API_KEY else '❌ 未配置'}")
+    print(f"🔌 监听地址: http://127.0.0.1:{PORT}")
     print("=" * 50)
-    
-    app.run(debug=True, host="127.0.0.1", port=5000)
+
+    try:
+        app.run(debug=True, host="127.0.0.1", port=PORT)
+    except OSError as e:
+        if e.errno != errno.EADDRINUSE:
+            raise
+        print()
+        print(f"❌ 端口 {PORT} 已被占用，无法启动。")
+        print()
+        print("排查步骤：")
+        print(f"  1. 查占用者：lsof -nP -iTCP:{PORT} -sTCP:LISTEN")
+        print(f"  2. 若是遗留 Python（debug reloader 孤儿常见）：")
+        print(f"     lsof -nP -iTCP:{PORT} -sTCP:LISTEN -t | xargs kill")
+        print(f"  3. 2 秒后再跑 ./start.sh")
+        print()
+        sys.exit(1)

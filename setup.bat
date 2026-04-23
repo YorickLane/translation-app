@@ -60,7 +60,7 @@ echo.
 echo 📖 使用说明：
 echo 1. 激活虚拟环境: venv\Scripts\activate.bat
 echo 2. 启动应用: python app.py（或 start.bat）
-echo 3. 在浏览器中访问: http://127.0.0.1:5000
+echo 3. 在浏览器中访问: http://127.0.0.1:5050
 echo.
 echo 如果遇到问题，请查看README.md中的故障排除部分
 pause
