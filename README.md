@@ -5,7 +5,7 @@
 
 ## 功能特性
 - 🎯 **智能文件上传**：支持拖拽和点击上传，实时文件验证
-- 🌍 **多语言支持**：支持193种语言，智能搜索和常用语言快选
+- 🌍 **多语言支持**：Google Translate 全量语言（当前约 195 种，会随 Google 变动），智能搜索和常用语言快选；无 Google 凭证时降级到 20 种常用语言
 - 🔍 **模糊搜索**：支持中文、英文、语言代码的模糊匹配
 - 📱 **响应式设计**：完美适配桌面端和移动端
 - ⚡ **实时进度**：Socket.IO实时显示翻译进度，精确到每个键值对
@@ -81,17 +81,28 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-#### 4. 配置Google Cloud凭证
-1. 在Google Cloud Console创建项目
-2. 启用Translation API
-3. 创建服务账号并下载JSON凭证文件
-4. 将凭证文件重命名为 `serviceKey.json` 并放在项目根目录
+#### 4. 配置凭证（至少一个）
 
-#### 5. 测试配置
+**OpenRouter（推荐，LLM 主引擎）** — 见上方「OpenRouter API Key 配置」节
+
+**Google Cloud Translation（可选 — 提供完整语言列表 + Google 引擎回退）**:
+1. 在 Google Cloud Console 创建项目
+2. 启用 Cloud Translation API
+3. 创建 service account 并授予 `roles/cloudtranslate.user` role
+4. 下载 JSON key 文件，重命名为 `serviceKey.json` 放项目根目录
+
+无 `serviceKey.json` 时：app 自动使用内置 20 种常用语言 fallback，Google 引擎不可用但 LLM 引擎正常。
+
+#### 5. 验证配置
 ```bash
-python test_credentials.py
+# Google 凭证（若有 serviceKey.json）
+python -c "from google.cloud import translate_v2 as translate; c=translate.Client(); print(f'✅ 拉到 {len(c.get_languages())} 种语言')"
+
+# OpenRouter
+python translate_llm.py --test
 ```
-如果看到"✅ 凭证验证成功！"说明配置正确。
+
+`./setup.sh` 会在安装末尾自动跑这两项。
 
 #### 6. 启动应用
 ```bash
@@ -195,26 +206,25 @@ python app.py            # 启动应用
 ```
 translation-app/
 ├── app.py                 # Flask主应用文件
-├── translate.py           # 翻译逻辑实现
+├── translate.py           # Google Translate 引擎实现
 ├── config.py             # 配置文件
-├── test_credentials.py   # 凭证测试脚本
-├── check_api_status.py   # API状态检查工具
-├── translate_llm.py      # OpenRouter AI 翻译模块
+├── translate_llm.py      # OpenRouter AI 翻译模块（主引擎）
 ├── llm_client.py         # OpenRouter 客户端层（OpenAI SDK + json_schema）
 ├── cost_estimator.py     # 费用估算（字符数）
 ├── llm_models.py         # AI 模型目录（3 档：Claude/GPT/Gemini）
+├── translation_config.py # 高级配置（批处理、温度、术语表）
+├── translation_postprocess.py # 翻译后处理（大写、术语一致性）
 ├── split_json.py         # JSON文件分割工具
 ├── example.json          # 示例JSON文件用于测试
 ├── test-small.json       # 小型测试文件
 ├── requirements.txt      # Python依赖包列表
-├── serviceKey.json       # Google Cloud凭证文件（需要自行创建）
+├── serviceKey.json       # Google Cloud 凭证（可选，见第 4 节）
 ├── setup.sh              # 一键安装脚本（macOS/Linux）
 ├── setup.bat             # 一键安装脚本（Windows）
 ├── start.sh              # 应用启动脚本（macOS/Linux）
 ├── start.bat             # 应用启动脚本（Windows）
 ├── API_USAGE_TIPS.md     # API使用建议文档
-├── BILLING_TROUBLESHOOTING.md # 计费问题排查指南
-├── CLAUDE_API_SETUP.md   # Claude API设置指南
+├── BILLING_TROUBLESHOOTING.md # Google Cloud 计费问题排查
 ├── CREATE_NEW_PROJECT.md # 创建新项目指南
 ├── templates/            # HTML模板文件
 │   ├── upload.html       # 主上传页面（现代化UI）
@@ -241,17 +251,16 @@ translation-app/
 
 ### 故障排除
 如果遇到问题，请按以下步骤检查：
-1. 确认Python版本 >= 3.8
+1. 确认Python版本 >= 3.8（推荐 3.10+）
 2. 确认虚拟环境已激活
 3. 确认所有依赖包已安装
-4. 确认 `serviceKey.json` 文件存在
-5. 确认Google Cloud项目配置正确
-6. 检查Google Cloud计费账号状态是否正常
+4. 确认至少一个翻译引擎凭证就位（`$OPENROUTER_API_KEY` 或 `serviceKey.json`）
+5. 若使用 Google 引擎：确认 Cloud Translation API 已启用 + 计费正常
 
 ### 🆘 更多帮助
 - **API使用建议**：查看 `API_USAGE_TIPS.md`
-- **计费问题排查**：查看 `BILLING_TROUBLESHOOTING.md`
-- **OpenRouter AI 配置**：见 [openrouter.ai/docs](https://openrouter.ai/docs)
+- **Google 计费问题**：查看 `BILLING_TROUBLESHOOTING.md`
+- **OpenRouter 文档**：[openrouter.ai/docs](https://openrouter.ai/docs)
 - **创建新项目**：查看 `CREATE_NEW_PROJECT.md`
 
 ## 🔧 开发相关

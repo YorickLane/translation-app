@@ -49,11 +49,11 @@
 修复计费问题后，使用以下命令验证：
 
 ```bash
-# 测试API连接
-python test_credentials.py
+# 测试 Google Translate API 连接 + 语言列表
+python -c "from google.cloud import translate_v2 as translate; c=translate.Client(); print(f'✅ 拉到 {len(c.get_languages())} 种语言')"
 
-# 或使用小文件测试
-python check_api_status.py --once
+# 或跑一次完整 translate 验证
+python -c "from google.cloud import translate_v2 as translate; c=translate.Client(); r=c.translate('Hello world', target_language='zh-CN'); print(r['translatedText'])"
 ```
 
 ## 💡 预防措施

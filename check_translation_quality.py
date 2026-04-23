@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-翻译质量检查工具
-用于检测语言包中的语言混乱、大写问题等
+翻译质量检查工具 V2
+更智能的语言检测，减少误报
 """
 
 import json
@@ -17,34 +17,72 @@ def load_json_file(filepath):
         return json.load(f)
 
 
+def contains_english_keywords(text, lang_code):
+    """检查文本是否包含英文关键词（更智能）"""
+    # 常见的英文UI词汇
+    keywords = [
+        'Please', 'Enter', 'Select', 'Password', 'Login',
+        'Settings', 'Edit', 'Delete', 'Clear', 'Copy',
+        'Download', 'Upload', 'Cancel', 'Confirm', 'Save',
+        'verification', 'progress', 'merchant', 'payment',
+        'Withdrawal', 'Payment', 'Error', 'Success'
+    ]
+    
+    # 语言特定的豁免词汇（这些词在该语言中是正确的）
+    language_exemptions = {
+        'es': ['confirmar', 'cancelar', 'editar', 'error'],
+        'pt': ['confirmar', 'cancelar', 'editar', 'upload', 'login', 'download'],
+        'fr': ['confirmer', 'entrer', 'enter', 'error'],
+        'it': ['password', 'login', 'cancella', 'download', 'upload', 'error'],
+        'de': ['download', 'upload', 'center', 'service', 'error']
+    }
+    
+    # 全局豁免词汇（品牌名、技术术语等）
+    global_exemptions = ['APP', 'iOS', 'Android', 'ID', 'VIP', 'API', 'URL', 'T+1', 
+                        'USDT', 'H5', 'PC', 'OK', 'PDF', 'HTML', 'JSON']
+    
+    text_lower = text.lower()
+    exemptions = language_exemptions.get(lang_code, [])
+    
+    for keyword in keywords:
+        if keyword.lower() in text_lower:
+            # 检查是否在豁免列表中
+            is_exempted = False
+            
+            # 检查语言特定豁免
+            for exemption in exemptions:
+                if exemption in text_lower:
+                    is_exempted = True
+                    break
+            
+            # 检查全局豁免
+            for exemption in global_exemptions:
+                if exemption.lower() in text_lower:
+                    is_exempted = True
+                    break
+            
+            if not is_exempted:
+                return True, keyword
+    
+    return False, None
+
+
 def check_english_in_non_english_file(data, language_code):
     """检查非英文文件中的英文内容"""
     if language_code == 'en':
         return []
     
     issues = []
-    english_pattern = re.compile(r'[A-Za-z]{3,}')
-    
-    # 常见的未翻译的英文词汇
-    common_english_words = [
-        'Please', 'Enter', 'Select', 'Password', 'Login',
-        'Settings', 'Edit', 'Delete', 'Clear', 'Copy',
-        'Download', 'Upload', 'Cancel', 'Confirm', 'Save',
-        'verification', 'progress', 'merchant', 'payment',
-        'Withdrawal', 'Payment'
-    ]
     
     for key, value in data.items():
-        if isinstance(value, str) and english_pattern.search(value):
-            # 检查是否包含常见英文词
-            for word in common_english_words:
-                if word.lower() in value.lower():
-                    issues.append({
-                        'key': key,
-                        'value': value,
-                        'issue': f'包含英文词汇: {word}'
-                    })
-                    break
+        if isinstance(value, str):
+            has_english, keyword = contains_english_keywords(value, language_code)
+            if has_english:
+                issues.append({
+                    'key': key,
+                    'value': value,
+                    'issue': f'包含英文词汇: {keyword}'
+                })
     
     return issues
 
@@ -62,6 +100,12 @@ def check_capitalization_issues(data, language_code):
             if isinstance(value, str) and len(value) > 0:
                 # 跳过缩写词和品牌名
                 if value.isupper() or len(value) <= 3:
+                    continue
+                
+                # 跳过包含特殊词汇的条目
+                skip_words = ['VIP', 'APP', 'USDT', 'ID', 'PC', 'H5', 'API']
+                should_skip = any(word in value for word in skip_words)
+                if should_skip:
                     continue
                 
                 # 检查首字母大写的单词（不在句首）
@@ -133,7 +177,7 @@ def analyze_language_file(filepath, reference_data=None):
         print(f"  - 总条目数: {len(data)}")
         print(f"  - 英文混入率: {len(english_issues)/len(data)*100:.1f}%")
         
-        if not english_issues and not cap_issues:
+        if not english_issues and not cap_issues and not (reference_data and missing_keys):
             print(f"\n✅ 文件质量良好!")
         
         return {
@@ -175,31 +219,47 @@ def check_directory(directory_path):
     print("汇总报告")
     print(f"{'='*60}")
     
-    total_issues = sum(r['english_issues'] + r['cap_issues'] for r in results)
+    total_issues = sum(r['english_issues'] + r['cap_issues'] + r['missing_keys'] for r in results)
     
     if total_issues == 0:
         print("✅ 所有文件质量良好!")
     else:
-        print(f"⚠️  发现总计 {total_issues} 个问题需要修复")
-        print("\n优先修复建议:")
+        print(f"⚠️  发现总计 {total_issues} 个问题")
+        print("\n问题分布:")
         
         # 按问题数量排序
         sorted_results = sorted(results, 
-                              key=lambda x: x['english_issues'] + x['cap_issues'], 
+                              key=lambda x: x['english_issues'] + x['cap_issues'] + x['missing_keys'], 
                               reverse=True)
         
-        for i, result in enumerate(sorted_results[:5]):
-            total = result['english_issues'] + result['cap_issues']
+        for i, result in enumerate(sorted_results[:10]):
+            total = result['english_issues'] + result['cap_issues'] + result['missing_keys']
             if total > 0:
-                print(f"{i+1}. {result['language']}.json - {total} 个问题 "
-                      f"(英文混入: {result['english_issues']}, "
-                      f"大写问题: {result['cap_issues']})")
+                parts = []
+                if result['english_issues'] > 0:
+                    parts.append(f"英文混入: {result['english_issues']}")
+                if result['cap_issues'] > 0:
+                    parts.append(f"大写问题: {result['cap_issues']}")
+                if result['missing_keys'] > 0:
+                    parts.append(f"缺失翻译: {result['missing_keys']}")
+                
+                print(f"{i+1}. {result['language']}.json - {total} 个问题 ({', '.join(parts)})")
+        
+        # 总结
+        print(f"\n📊 质量总结:")
+        excellent = [r for r in results if r['english_issues'] == 0 and r['cap_issues'] == 0 and r['missing_keys'] == 0]
+        good = [r for r in results if r['english_issues'] < 5 and r['cap_issues'] < 5 and r['missing_keys'] < 10]
+        
+        if excellent:
+            print(f"  - 优秀: {', '.join([r['language'] + '.json' for r in excellent])}")
+        if good and len(good) != len(excellent):
+            print(f"  - 良好: {', '.join([r['language'] + '.json' for r in good if r not in excellent])}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description='检查翻译文件质量')
+    parser = argparse.ArgumentParser(description='检查翻译文件质量 V2')
     parser.add_argument('path', help='要检查的文件或目录路径')
-    parser.add_argument('--fix', action='store_true', help='尝试自动修复问题（未实现）')
+    parser.add_argument('--strict', action='store_true', help='使用严格模式')
     
     args = parser.parse_args()
     

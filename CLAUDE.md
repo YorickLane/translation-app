@@ -33,8 +33,8 @@ python app.py
 
 ### Testing and Validation
 ```bash
-# Test Google Cloud credentials
-python test_credentials.py
+# Test Google Cloud credentials (inline, 脚本已删除)
+python -c "from google.cloud import translate_v2 as translate; c=translate.Client(); print(f'✅ {len(c.get_languages())} languages')"
 
 # Test OpenRouter + default model
 python translate_llm.py --test
@@ -132,7 +132,7 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
 4. **配置系统层次**
    ```
    config.py (基础配置)
-   ├── TRANSLATION_ENGINE, CLAUDE_API_KEY, CLAUDE_MODEL
+   ├── TRANSLATION_ENGINE, OPENROUTER_API_KEY, DEFAULT_MODEL
    ├── BATCH_SIZE, REQUEST_DELAY, MAX_RETRIES
    └── 被 translation_config.py 覆盖（如果存在）
 
@@ -197,9 +197,9 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
    - 最终失败时保留原文而非丢弃
 
 4. **费用估算准确性**
-   - 快速估算：单语言约 94%，多语言约 78% 准确
-   - API 计算：输入 tokens 100% 准确，输出基于经验倍数
-   - 输出倍数根据语言调整（见 `claude_token_counter.py` L110-135）
+   - 仅字符估算：OpenRouter 不代理 `count_tokens` API，无法精确算 tokens
+   - 典型误差 20-30%（UI 明确标注"估算值"）
+   - 输出倍数按语言调整（见 `cost_estimator.py` 的 `output_multipliers`）
 
 5. **文件处理**
    - 上传: `uploads/` 目录（临时存储）
@@ -229,12 +229,12 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
 1. 在 `translation_config.py` 添加 `TEMPERATURE_BY_LANGUAGE` 条目
 2. 在 `VALIDATION_STRENGTH` 设置验证级别
 3. 在 `TERM_GLOSSARY` 添加常用术语
-4. 在 `translate_claude.py` 的 `capitalization_rules` 添加大写规则
+4. 在 `translate_llm.py` 的 `capitalization_rules` 添加大写规则
 
-**添加新的费用估算功能**:
-- 修改 `claude_token_counter.py` 中的输出倍数（`output_multipliers`）
-- 调整 API 计数逻辑（`count_tokens_with_api()`）
-- 更新前端显示（`templates/upload.html` 中的 JavaScript）
+**调整费用估算参数**:
+- 修改 `cost_estimator.py` 的 `output_multipliers`（各语言 expansion factor）
+- 更新 `llm_models.py` 的 `AVAILABLE_MODELS` 定价（来源：[openrouter.ai/pricing](https://openrouter.ai/pricing)）
+- 前端显示逻辑在 `templates/upload.html` 内嵌 JS
 
 ### Important Constraints
 
@@ -242,12 +242,13 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
    - `ALLOWED_EXTENSIONS = {"json", "js"}`
    - 前端和后端双重验证
 
-2. **支持 193 种语言**
-   - 通过 Google Translate API 获取
+2. **多语言支持**
+   - 有 Google 凭证时通过 Translate API 拉取完整列表（当前约 195 种，会随 Google 变动）
+   - 无凭证时降级到 `app.py` 内置的 `_FALLBACK_LANGUAGES`（20 种常用）
    - 使用 `@lru_cache` 缓存语言列表
 
 3. **无测试框架**
-   - 依赖手动测试脚本（`test_credentials.py`, `translate_claude.py --test`）
+   - 依赖手动验证（`python translate_llm.py --test` + `./setup.sh` 末尾 inline 凭证验证）
    - 考虑添加 pytest 时需新增 `tests/` 目录
 
 4. **无前端构建工具**
@@ -266,8 +267,8 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
   - `uploads/` 和 `output/` 中的临时文件
 
 - **API Key 管理**:
-  - 使用环境变量或 .env
-  - macOS 可使用 Keychain（`keychain_config.py`）
+  - 本项目**不使用** `.env` 文件。走全局 secrets SoT：`~/.config/secrets.env` + shell env export
+  - 详见 `~/claude-soul/protocols/secrets-management.md`
 
 ### Known Issues and Workarounds
 
@@ -292,8 +293,7 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
 项目包含详细文档：
 - `README.md`: 用户使用指南
 - `API_USAGE_TIPS.md`: API 使用建议
-- `BILLING_TROUBLESHOOTING.md`: 计费问题排查
-- `CLAUDE_API_SETUP.md`: Claude API 设置
+- `BILLING_TROUBLESHOOTING.md`: Google Cloud 计费问题排查
 - `CREATE_NEW_PROJECT.md`: 创建新项目指南
 
 官方文档：

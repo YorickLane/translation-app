@@ -76,7 +76,7 @@ LAST_CACHED = datetime.datetime.now()
 
 @lru_cache(maxsize=None)
 def get_supported_languages():
-    """返回支持的语言列表。有 Google 凭证时拉 193 种，否则返回 20 种 fallback。"""
+    """返回支持的语言列表。有 Google 凭证时拉 Google Translate 全部语言（数量会随 Google 变动），否则返回 20 种 fallback。"""
     try:
         languages = _get_translate_client().get_languages()
         return [{"name": lang["name"], "code": lang["language"]} for lang in languages]

@@ -53,7 +53,7 @@ TEMPERATURE_BY_LANGUAGE = {
 
 创建了三个核心工具：
 
-1. **check_translation_quality_v2.py** - 智能质量检查
+1. **check_translation_quality.py** - 智能质量检查
 2. **fix_translation_auto.py** - 自动修复工具
 3. **translation_postprocess.py** - 翻译后处理模块
 
@@ -80,13 +80,13 @@ TEMPERATURE_BY_LANGUAGE = {
 ### 问题修复流程
 ```bash
 # 1. 检查质量
-python check_translation_quality_v2.py /path/to/locales/
+python check_translation_quality.py /path/to/locales/
 
 # 2. 自动修复
 python fix_translation_auto.py /path/to/locales/
 
 # 3. 验证结果
-python check_translation_quality_v2.py /path/to/locales/
+python check_translation_quality.py /path/to/locales/
 ```
 
 ### 进一步优化
