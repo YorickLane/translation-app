@@ -120,15 +120,17 @@ def contains_english(text):
     return bool(re.search(r'[a-zA-Z]', temp_text))
 
 
+_ENGLISH_KEYWORD_PATTERNS = [
+    re.compile(rf'\b{re.escape(k)}\b', re.IGNORECASE)
+    for k in QUALITY_CHECK_RULES['english_keywords']
+]
+
+
 def contains_english_keywords(text):
-    """检查是否包含常见的英文关键词"""
-    keywords = QUALITY_CHECK_RULES['english_keywords']
-    text_lower = text.lower()
-    
-    for keyword in keywords:
-        if keyword.lower() in text_lower:
+    """检查是否包含常见的英文关键词（词边界匹配，避免把罗曼语系同源词误判）。"""
+    for pattern in _ENGLISH_KEYWORD_PATTERNS:
+        if pattern.search(text):
             return True
-    
     return False
 
 

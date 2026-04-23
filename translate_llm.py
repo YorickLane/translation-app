@@ -111,6 +111,10 @@ _ENGLISH_KEYWORDS = {
     'verification', 'progress', 'merchant', 'payment',
 }
 _ENGLISH_PATTERN = re.compile(r'[A-Za-z]{3,}')
+# 词边界匹配，避免把罗曼语系同源词（cancelar/confirmar/editar/copiar 等）误判为英文混入
+_ENGLISH_KEYWORD_PATTERNS = [
+    re.compile(rf'\b{re.escape(w)}\b', re.IGNORECASE) for w in _ENGLISH_KEYWORDS
+]
 
 
 def _contains_too_much_english(translations):
@@ -122,9 +126,8 @@ def _contains_too_much_english(translations):
             continue
         total += 1
         if _ENGLISH_PATTERN.search(value):
-            lower = value.lower()
-            for word in _ENGLISH_KEYWORDS:
-                if word.lower() in lower:
+            for pattern in _ENGLISH_KEYWORD_PATTERNS:
+                if pattern.search(value):
                     english_hit += 1
                     break
     return total > 0 and english_hit / total > 0.2
