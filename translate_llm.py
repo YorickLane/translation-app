@@ -324,7 +324,10 @@ def translate_js_file_llm(
 
     translation_dict = {}
     for k, v in pairs:
-        clean_k = k.strip("'")
+        # 源 key 有三种写法: bare(全球到达时间) / 单引号('Settings.xxx') / 双引号("滑动验证")。
+        # 正则的 [^\s:]+ 分支会把双引号一起吞进 key，必须同时剥单/双引号，
+        # 否则双引号残留 → 输出时再包一层 => ""key"" 非法 JS，构建报错。
+        clean_k = k.strip().strip("\"'")
         clean_v = v.strip().strip("`\"'")
         if clean_v.strip():
             translation_dict[clean_k] = clean_v
