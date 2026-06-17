@@ -1,6 +1,8 @@
 #!/bin/bash
 
 # 翻译应用一键安装脚本
+# 注：本项目 venv 为手动维护（手动 ./setup.sh / ./start.sh），非常驻服务，不受
+#     claude-soul runtime-versions 探针追踪；Python 目标见 .python-version（3.14.x）。
 echo "🚀 开始安装翻译应用..."
 
 # 检查Python版本
@@ -19,26 +21,35 @@ else
     exit 1
 fi
 
-# 创建虚拟环境
-echo "📦 创建Python虚拟环境..."
-if [ ! -d "venv" ]; then
-    python3 -m venv venv
-    echo "✅ 虚拟环境创建成功"
+# 创建/校验虚拟环境
+# 只查 [ -d venv ] 不够 — relocation 或 Python 升级会留下“目录在但坏掉”的 venv：
+#   · activate 硬编码绝对路径（mv .venv→venv 后指向幽灵目录 → command not found）
+#   · console-script（pip/flask）的 shebang 指向旧解释器 → bad interpreter
+# 故实测解释器可用性，坏了就重建（venv 已 gitignored，可从 requirements.txt 完全重建）。
+echo "📦 检查Python虚拟环境..."
+if [ -x venv/bin/python ] && venv/bin/python -c '' 2>/dev/null; then
+    echo "ℹ️  虚拟环境已存在且可用（$(venv/bin/python --version 2>&1)）"
 else
-    echo "ℹ️  虚拟环境已存在"
+    if [ -d venv ]; then
+        echo "⚠️  检测到损坏的 venv（解释器不可用/路径失效），重建中..."
+        rm -rf venv
+    fi
+    python3 -m venv venv
+    echo "✅ 虚拟环境创建成功（$(venv/bin/python --version 2>&1)）"
 fi
 
 # 激活虚拟环境
 echo "🔄 激活虚拟环境..."
 source venv/bin/activate
 
-# 升级pip
+# 升级 pip + 装依赖 — 一律走 `python -m pip`，不依赖脆弱的 pip console-script shebang
+# （relocation/Python 升级后 console-script 会 bad interpreter；`-m` 形态永远 mv-safe）
 echo "⬆️  升级pip..."
-pip install --upgrade pip
+python -m pip install --upgrade pip
 
 # 安装依赖
 echo "📥 安装项目依赖..."
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 
 # 检查Google Cloud凭证（可选 — 语言列表 + 回退引擎）
 # 查找顺序: GOOGLE_APPLICATION_CREDENTIALS env → gcloud ADC → 项目根 fallback 文件

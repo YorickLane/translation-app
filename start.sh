@@ -2,9 +2,9 @@
 
 echo "🚀 启动翻译应用..."
 
-# 检查虚拟环境
-if [ ! -d "venv" ]; then
-    echo "❌ 未找到虚拟环境，请先运行 ./setup.sh 进行安装"
+# 检查虚拟环境（实测解释器可用，不只查目录存在 — relocation/Python 升级会留坏 venv）
+if ! { [ -x venv/bin/python ] && venv/bin/python -c '' 2>/dev/null; }; then
+    echo "❌ 虚拟环境缺失或损坏，请运行 ./setup.sh（会自动检测并重建）"
     exit 1
 fi
 
