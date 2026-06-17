@@ -143,8 +143,16 @@ TERM_GLOSSARY = {
 # 质量检查规则
 QUALITY_CHECK_RULES = {
     # 检查英文混入的关键词
+    # ⚠️ 只放"在目标语言里属于错误（= 英文没翻干净）"的 UI 词。
+    # 不要放目标语言已吸收的外来词/借词 (loanword) —— 它们是正确译文，不是英文泄漏。
+    # 词边界匹配 (contains_english_keywords) 能挡住同源词 (cancelar 含 "cancel" 不命中)，
+    # 但借词与目标语同形 (意/西/法/葡/德 UI 里 "password" 就是完整单词)，词边界挡不住，
+    # 唯一解法 = 不放进黑名单。
+    #   - 已移除 (2026-06-17): 'Password' / 'Login' —— 全目标语言通用借词，纯误报。
+    #   - 同类待评估 (用到再删，目前留着): 'Download'/'Upload' (多语 UI 直接借用)、
+    #     'Error' (与西语 "error" 同形，会误伤西语；非西语仍是有效泄漏信号)。
     'english_keywords': [
-        'Please', 'Enter', 'Select', 'Password', 'Login',
+        'Please', 'Enter', 'Select',
         'Settings', 'Edit', 'Delete', 'Clear', 'Copy',
         'Download', 'Upload', 'Cancel', 'Confirm', 'Save',
         'verification', 'progress', 'merchant', 'payment',
