@@ -21,6 +21,7 @@ MODERN_TERMS = {
     "视频": "影片",
     "登录": "登入",
     "加载": "載入",
+    "充值": "儲值",   # 台湾 top-up 标准词（充值=大陆），web 验证 2026-06-21
 }
 
 
@@ -39,7 +40,7 @@ def test_ensure_term_consistency_enforces_taiwan_terms():
 
 
 @pytest.mark.parametrize("lang", ["zh-TW", "zh-Hant"])
-@pytest.mark.parametrize("term", ["網路", "資訊", "訊息", "透過", "通過"])
+@pytest.mark.parametrize("term", ["網路", "資訊", "訊息", "透過", "通過", "儲值", "連線"])
 def test_prompt_carries_taiwan_vocab(lang, term):
     rule = translate_llm.CAPITALIZATION_RULES[lang]
     assert term in rule
