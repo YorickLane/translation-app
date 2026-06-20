@@ -33,8 +33,11 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 DEFAULT_MODEL = os.environ.get("DEFAULT_MODEL", "anthropic/claude-sonnet-4.6")
 
 # 文件限制
+# 注意: MAX_FILE_SIZE 当前未接线为 Flask MAX_CONTENT_LENGTH（上传暂无大小限制）。
+#       接线需先定限值（>10MB 的合法 ZIP 会被 413）—— 见 REFACTORING_AUDIT.md D4 提案。
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
-ALLOWED_EXTENSIONS = {"json", "js"}
+# 允许上传的扩展名（单源真相；app.py 从这里 import，勿在 app.py 另立副本）
+ALLOWED_EXTENSIONS = {"json", "js", "zip"}
 
 # 批处理默认值（可被 translation_config.BATCH_CONFIG 覆盖）
 BATCH_SIZE = 3

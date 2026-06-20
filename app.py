@@ -16,7 +16,7 @@ from google.cloud import translate_v2 as translate
 import datetime
 from flask_socketio import SocketIO, emit
 from time import sleep
-from config import SECRET_KEY, TRANSLATION_ENGINE
+from config import SECRET_KEY, TRANSLATION_ENGINE, ALLOWED_EXTENSIONS
 import config
 from google.auth.exceptions import RefreshError
 
@@ -29,7 +29,7 @@ socketio = SocketIO(app, async_mode='threading')
 # Configuration
 UPLOAD_FOLDER = "uploads"
 OUTPUT_FOLDER = "output"
-ALLOWED_EXTENSIONS = {"json", "js", "zip"}
+# ALLOWED_EXTENSIONS 单源真相在 config.py（上方 import），勿在此另立副本
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
 # Google Translate Client —— lazy init，凭证缺失时降级到 fallback 语言列表
