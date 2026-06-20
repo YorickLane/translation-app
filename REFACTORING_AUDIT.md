@@ -201,3 +201,36 @@ vs LLM 扁平批处理，结构不同，强抽 = premature abstraction）。
 6. **D 类提案 → 等批准**。
 
 > 状态在本表 §0 随实现更新。
+
+---
+
+## 10. 真实数据验证（2026-06-20，零→少 token）
+
+在 `~/WorkSpace/WT/{X,S,x-project}` 的**真实语言包**上验证本轮改动（数据驱动）。
+
+### e2e 真翻译（OpenRouter Sonnet 4.6 实跑）
+`cli.py x-project/download-default/zh-CN.json(77key) --langs zh-TW,es` → 50.9s，2/2 成功，
+key 完整无缺、繁体道地（設備→裝置）、**D.7 闭环实际触发**（zh-TW 检出 1 条 Oracle 品牌→
+重译→入 `needs_review.json`；es moderate 不触发，符合设计）。
+
+### 检测器精修（real-data 驱动，commit `4db6a54`）
+e2e + 64 包巡检暴露两类误报 → 根因修复并实测：
+- `contains_english` 旧版把 CJK 长句嵌入的品牌/术语/括注（Oracle / Artificial Intelligence
+  括注 / allegro）误判"未翻译" → 改 **CJK 占比 ≥30% 放行**。实测全队 64 包 49896 条
+  **英文误报 23+1 → 0**；纯英文 Confirm/Please login 仍正确判 True。
+- `check_translation_quality` substring → **词边界**（与管线一致）。实测 es 同源词误报 6 → 0。
+
+### 64 包 zh-TW 质量巡检（改进后检测器）
+- **英文未翻：0 / 49896（0.00%）** —— 全队零误报。
+- **简体残留：555（1.11%）**，1/64 完全干净。Top 修正：`了→瞭`178 / `表→錶`120（多为
+  `儀表板→儀錶板`，**台湾变体偏好**非简体）、`周→週`78 / `占→佔`62（TW 正字）、
+  `请→請`/`译→譯`/`码→碼`/`输→輸` 等（**真简体残留**）。s2tw 正确保留 `表格`/`列表`/
+  particle `完成了`。
+- **决策**：`contains_simplified` 保持现状（over-flag 非破坏可人工 review；over-exempt 会漏
+  真简体 `体→體`，违技术精度底线）。变体偏好主杠杆仍是 prompt（D.10）。E.11 若要调
+  `_TRAD_VARIANT_OK` 属台湾用语政策，需 Yorick 拍板（数据已备）。
+
+### 真实数据损坏发现（report-only，未擅改其项目文件）
+`x-project/apps/seller-h5/src/locales/zh-TW.json` 残留 **22 条 `[需要重新翻译]` 旧破坏性
+标记**（cb780b2 已在代码根治，但该旧输出文件仍带污染）。属 Yorick 项目工件，按所有权
+边界 report-only；可用 `cli.py` 重译修复（待他指示）。
