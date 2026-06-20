@@ -122,8 +122,14 @@ def ensure_term_consistency(data, target_lang, source_lang='zh-CN'):
     return data
 
 
-# 合法嵌入拉丁的白名单（含小写的品牌/单位）。全大写缩写无需列入——见下判定逻辑。
-_LATIN_ALLOW = {'ios', 'iphone', 'ipad', 'android', 'safari', 'app', 'px'}
+# 合法嵌入拉丁的白名单（含小写的品牌/单位/文件格式）。全大写缩写无需列入——见下判定逻辑。
+_LATIN_ALLOW = {
+    'ios', 'iphone', 'ipad', 'android', 'safari', 'app', 'px',
+    # 常见文件格式/扩展名（如 "png/jpg/jpeg 格式" 这类，属合法保留非英文泄漏）
+    'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico', 'heic', 'tiff',
+    'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'csv', 'txt', 'zip',
+    'mp3', 'mp4', 'mov', 'avi', 'wav',
+}
 
 
 def contains_english(text):

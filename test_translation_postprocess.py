@@ -38,6 +38,8 @@ ENGLISH_NEGATIVES = [
     "請上傳店鋪LOGO(75*75px)",                # 像素单位
     "iOS下載",                               # 品牌（含小写，白名单）
     "Android下載",                           # 品牌（含小写，白名单）
+    "只允許上傳 png/jpg/jpeg 格式的圖片",      # 文件格式名（小写，白名单）
+    "支援 gif/svg/webp/pdf 上傳",             # 更多文件格式
 ]
 
 # contains_english：真正未翻译的英文 → 应判为 True
