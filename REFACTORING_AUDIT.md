@@ -10,21 +10,39 @@
 
 | # | 发现 | 证据 | 价值 | 工作量 | 归类 | 状态 |
 |---|------|------|:---:|:---:|------|------|
-| C.6 | 无测试框架 → 立 pytest 安全网 | 根目录 2 个 stdlib 测试 / `rg pytest` 未装 | 高 | 中 | quick-win（**先做**） | ⬜ |
-| A.1 | `MODEL_RECOMMENDATIONS` 死代码 + 过时直连 slug | `translation_config.py:51`，0 消费者 | 中 | 小 | quick-win | ⬜ |
-| A.1+ | `CACHE_CONFIG`/`LOGGING_CONFIG` 死代码（描述不存在的功能） | `translation_config.py:199,206`，0 消费者 | 中 | 小 | quick-win | ⬜ |
-| A.3 | `commit_message.txt` 遗留物 | 根目录 4KB，0 引用 | 低 | 小 | quick-win | ⬜ |
-| A.3+ | `templates/upload.html.backup` 旧单体（1752 行） | 含旧 `/api/claude-models` + 内联 JS | 中 | 小 | quick-win | ⬜ |
-| B-cfg | `config.ALLOWED_EXTENSIONS` 死+漂移；`MAX_FILE_SIZE` 死 | `config.py:36-37`，0 消费者 | 中 | 小 | quick-win（TDD） | ⬜ |
-| A.2 | `fix_translation_issues.py`+`fix_translation_auto.py` 删除 | 0 导入，用旧 buggy 检测 | 中 | 中 | quick-win（可逆 commit） | ⬜ |
-| B.4/DOC | CLAUDE.md 文档漂移（端点/扩展名/zip/外链 JS/批次） | 见 §4 | 高 | 小 | quick-win | ⬜ |
-| DOC6 | 2 个 OPTIMIZATION 文档严重过时 | Sonnet 3.5/BATCH=5/已删文件 | 中 | 小 | quick-win（归档） | ⬜ |
-| B.5 | 英文检测算法分散（删脚本后基本收敛） | 5 处 → 2 处 | 中 | 中 | 提案 | ⬜ |
-| **D.7** | 回灌重译闭环未实现 | `strict_validation` 仅检测 | 高 | 大 | **需批准** | ⬜ |
-| **D.8** | 双引擎分批/重试/进度重复 | `translate.py` vs `translate_llm.py` | 中 | 大 | **需批准** | ⬜ |
-| **D.9** | 无无头 CLI（自动化/CI 不便） | 仅 Web + 库函数 | 中 | 中 | **需批准** | ⬜ |
-| **D.10** | `ensure_term_consistency` 整 key 精确匹配近乎无效 | `translation_postprocess.py:107` | 中 | 中 | **需批准** | ⬜ |
-| E.11-14 | 质量打磨（简繁变体/标点/tokenizer 等） | 见 §7 | 低 | 杂 | 文档化/择机 | ⬜ |
+| C.6 | 无测试框架 → 立 pytest 安全网 | 根目录 2 个 stdlib 测试 / `rg pytest` 未装 | 高 | 中 | quick-win（**先做**） | ✅ `62ac108` |
+| A.1 | `MODEL_RECOMMENDATIONS` 死代码 + 过时直连 slug | `translation_config.py:51`，0 消费者 | 中 | 小 | quick-win | ✅ `ddde1c2` |
+| A.1+ | `CACHE_CONFIG`/`LOGGING_CONFIG` 死代码（描述不存在的功能） | `translation_config.py:199,206`，0 消费者 | 中 | 小 | quick-win | ✅ `ddde1c2` |
+| A.3 | `commit_message.txt` 遗留物 | 根目录 4KB，0 引用 | 低 | 小 | quick-win | ✅ `ddde1c2` |
+| A.3+ | `templates/upload.html.backup` 旧单体（1752 行） | 含旧 `/api/claude-models` + 内联 JS | 中 | 小 | quick-win | ✅ `ddde1c2` |
+| B-cfg | `config.ALLOWED_EXTENSIONS` 死+漂移；`MAX_FILE_SIZE` 死 | `config.py:36-37`，0 消费者 | 中 | 小 | quick-win（TDD） | ✅ ALLOWED `488cc28` · MAX_FILE_SIZE→D4 |
+| A.2 | `fix_translation_issues.py`+`fix_translation_auto.py` 删除 | 0 导入，用旧 buggy 检测 | 中 | 中 | quick-win（可逆 commit） | ✅ `e1618dd` |
+| B.4/DOC | CLAUDE.md 文档漂移（端点/扩展名/zip/外链 JS/批次） | 见 §4 | 高 | 小 | quick-win | ✅ `4ff424f` |
+| DOC6 | 2 个 OPTIMIZATION 文档严重过时 | Sonnet 3.5/BATCH=5/已删文件 | 中 | 小 | quick-win（归档） | ✅ `e1618dd` |
+| B.5 | 英文检测算法分散（删脚本后基本收敛） | 5 处 → 2 处 | 中 | 中 | 提案 | 📋 待批准 |
+| **D.7** | 回灌重译闭环未实现 | `strict_validation` 仅检测 | 高 | 大 | **需批准** | 📋 待批准 |
+| **D.8** | 双引擎分批/重试/进度重复 | `translate.py` vs `translate_llm.py` | 中 | 大 | **需批准** | 📋 待批准 |
+| **D.9** | 无无头 CLI（自动化/CI 不便） | 仅 Web + 库函数 | 中 | 中 | **需批准** | 📋 待批准 |
+| **D.10** | `ensure_term_consistency` 整 key 精确匹配近乎无效 | `translation_postprocess.py:107` | 中 | 中 | **需批准** | 📋 待批准 |
+| E.11-14 | 质量打磨（简繁变体/标点/tokenizer 等） | 见 §7 | 低 | 杂 | 文档化/择机 | 📋 待定 |
+
+### 本轮已实现（quick-win，6 commit，全程 TDD + pytest 62 绿）
+
+| commit | 内容 |
+|---|---|
+| `ff38390` | docs: REFACTORING_AUDIT.md |
+| `62ac108` | test: pytest 安全网（tests/ 迁移 + smoke + SoT 不变量 + setup.sh 自检）|
+| `ddde1c2` | chore: 删死代码（MODEL_RECOMMENDATIONS/CACHE_CONFIG/LOGGING_CONFIG + commit_message.txt + upload.html.backup）|
+| `488cc28` | refactor: ALLOWED_EXTENSIONS 单源真相 |
+| `e1618dd` | chore: 删 fix_translation_*（0 导入）+ 归档 OPTIMIZATION 文档 |
+| `4ff424f` | docs: CLAUDE.md 文档漂移修正 + llm_models 文档串 |
+
+**待你拍板**：B.5 / D.7 / D.8 / D.9 / D.10（见 §5-6）。`MAX_FILE_SIZE` 接线见 D4（下）。
+
+### D4 — MAX_FILE_SIZE 接线（小，需限值决策）
+`config.MAX_FILE_SIZE`（10MB）当前 0 消费者；Flask 未设 `MAX_CONTENT_LENGTH` → 上传无大小上限。
+接线 `app.config["MAX_CONTENT_LENGTH"] = MAX_FILE_SIZE` 即得保护，但 >10MB 的合法 ZIP 会收 413。
+**需定限值**（10MB？50MB？）后我 TDD 接线。未定前保留常量 + 注释（已加于 `config.py:36`）。
 
 ---
 
