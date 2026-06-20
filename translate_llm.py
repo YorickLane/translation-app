@@ -18,6 +18,7 @@ import re
 from llm_client import translate_batch
 from config import BATCH_SIZE, REQUEST_DELAY, MAX_RETRIES, DEFAULT_MODEL
 from translation_config import QUALITY_CHECK_RULES
+from js_locale import parse_js_locale, dump_js_locale
 
 try:
     from translation_config import (
@@ -311,10 +312,6 @@ def translate_json_file_llm(
 
 # ---------- JS 文件翻译 ----------
 
-_JS_KV_PATTERN = re.compile(
-    r'(\'[^\']+\'|[^\s:]+):\s*(`.*?`|".*?"|\'.*?\')', re.DOTALL,
-)
-
 
 def translate_js_file_llm(
     source_file_path, target_language,
@@ -329,19 +326,9 @@ def translate_js_file_llm(
     with open(source_file_path, "r", encoding="utf-8") as f:
         content = f.read()
 
-    pairs = _JS_KV_PATTERN.findall(content)
-    if not pairs:
+    translation_dict = parse_js_locale(content)
+    if not translation_dict:
         raise ValueError("无法从 JS 文件提取键值对，请检查格式")
-
-    translation_dict = {}
-    for k, v in pairs:
-        # 源 key 有三种写法: bare(全球到达时间) / 单引号('Settings.xxx') / 双引号("滑动验证")。
-        # 正则的 [^\s:]+ 分支会把双引号一起吞进 key，必须同时剥单/双引号，
-        # 否则双引号残留 → 输出时再包一层 => ""key"" 非法 JS，构建报错。
-        clean_k = k.strip().strip("\"'")
-        clean_v = v.strip().strip("`\"'")
-        if clean_v.strip():
-            translation_dict[clean_k] = clean_v
 
     items = list(translation_dict.items())
     total_items = len(translation_dict)
@@ -378,17 +365,11 @@ def translate_js_file_llm(
             time.sleep(REQUEST_DELAY)
 
     # 组装 JS 输出
-    lines = ["export default {\n"]
-    for k, v in translated_data.items():
-        escaped = v.replace('"', '\\"')
-        lines.append(f'  "{k}": "{escaped}",\n')
-    lines.append("};\n")
-
     output_file = f"{source_base}_{target_language}.js"
     output_path = os.path.join(output_dir, output_file)
     os.makedirs(output_dir, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
-        f.write("".join(lines))
+        f.write(dump_js_locale(translated_data))
 
     _report_completion(progress_callback, selected_model, failed_batches)
     return output_file

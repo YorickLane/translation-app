@@ -11,6 +11,7 @@ MODULES = [
     "config",
     "translation_config",
     "translation_postprocess",
+    "js_locale",
     "llm_models",
     "llm_client",
     "cost_estimator",

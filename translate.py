@@ -13,6 +13,7 @@ from google.api_core.exceptions import (
     ServiceUnavailable,
     GoogleAPIError,
 )
+from js_locale import JS_KV_PATTERN, dump_js_locale
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -252,17 +253,15 @@ def translate_locale_file(
 
     logger.info(f"文件内容预览: {content[:200]}...")
 
-    # Updated regex pattern to match a broader range of key characters
-    key_value_pairs = re.findall(
-        r'(\'[^\']+\'|[^\s:]+):\s*(`.*?`|".*?"|\'.*?\')', content, re.DOTALL
-    )
+    # JS 键值对正则与解析/输出已抽到 js_locale（与 LLM 引擎共用同一份）
+    key_value_pairs = JS_KV_PATTERN.findall(content)
     logger.info(f"找到 {len(key_value_pairs)} 个键值对")
 
     translated_key_value_pairs = []
     total_pairs = len(key_value_pairs)
 
     for i, (key, value) in enumerate(key_value_pairs, 1):
-        key = key.strip("'")  # Remove single quotes from key if present
+        key = key.strip().strip("\"'")  # 同时剥单/双引号（修双引号 key → ""key"" 非法 JS，对齐 7772f65）
         logger.info(f"翻译进度: {i}/{total_pairs} - {key}")
 
         try:
@@ -290,14 +289,6 @@ def translate_locale_file(
             cleaned_value = value.strip().strip("`\"'")
             translated_key_value_pairs.append((key, cleaned_value))
 
-    # Construct the translated content using "export default" format
-    translated_content = ["export default {\n"]
-    for key, value in translated_key_value_pairs:
-        # 转义引号
-        escaped_value = value.replace('"', '\\"')
-        translated_content.append(f'  "{key}": "{escaped_value}",\n')
-    translated_content.append("};\n")
-
     # 输出文件名包含源文件名，避免多文件翻译时的命名冲突
     output_file_name = f"{source_base_name}_{target_language}.js"
     output_path = os.path.join(output_dir, output_file_name)
@@ -306,7 +297,7 @@ def translate_locale_file(
     os.makedirs(output_dir, exist_ok=True)
 
     with open(output_path, "w", encoding="utf-8") as f:
-        f.write("".join(translated_content))
+        f.write(dump_js_locale(dict(translated_key_value_pairs)))
 
     logger.info(f"JS翻译完成: {output_file_name}")
     return output_file_name
