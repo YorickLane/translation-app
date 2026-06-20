@@ -5,7 +5,7 @@ LLM 模型目录 —— OpenRouter 上的三档推荐模型
 - 3 档覆盖 90% 场景（质量 / 备选 / 经济），不铺 20 个选项避免选择困难
 - 硬编码，不做 runtime API 发现（简单 + 可靠 + 不浪费 API 调用）
 - 定价与 OpenRouter live 数据对齐（2026-04-22 校准）
-- 新增模型 = 改这个文件 + cost_estimator.py 的 MODEL_PRICING
+- 新增模型 = 只改这个文件（cost_estimator 直接读 get_model_info()，定价单源，无需另改）
 """
 
 from typing import Literal, TypedDict

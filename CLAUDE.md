@@ -33,6 +33,9 @@ python app.py
 
 ### Testing and Validation
 ```bash
+# 跑 pytest 测试套件（离线，不需 API key / 凭证）
+./venv/bin/pytest
+
 # Test Google Cloud credentials (inline, 脚本已删除)
 python -c "from google.cloud import translate_v2 as translate; c=translate.Client(); print(f'✅ {len(c.get_languages())} languages')"
 
@@ -52,15 +55,15 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
 
 ### Core Components
 
-1. **app.py** (12.6 KB) - Flask 主应用
+1. **app.py** - Flask 主应用
    - Socket.IO 实时通信（`/test` namespace）
-   - 路由: `/` (上传), `/translate` (处理), `/success` (结果)
-   - API 端点: `/api/claude-models`, `/api/estimate-cost`
+   - 路由: `/` (上传), `/translate` (处理，含 ZIP 压缩包解压→逐文件翻译→保结构打包), `/success` (结果)
+   - API 端点: `/api/llm-models`, `/api/estimate-cost`
    - 使用 `threading` 异步模式（stdlib，Miguel Grinberg 当前推荐姿势）
 
 2. **translate.py** - Google Translate 引擎
    - 嵌套 JSON 结构处理，保留格式和占位符
-   - 批处理机制（BATCH_SIZE=10）
+   - 逐条翻译（`BATCH_SIZE` 常量已定义但批处理代码当前注释停用）
    - 重试逻辑处理 API 临时错误
    - 进度回调支持实时更新
 
@@ -105,7 +108,7 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
    - 罗曼语系自动小写处理（es, fr, it, pt）
    - 质量报告生成
 
-8. **Frontend** (`templates/upload.html`)
+8. **Frontend** (`templates/upload.html` + `static/js/upload.js` + `static/css/upload.css`)
    - 无框架纯 JavaScript + Socket.IO 客户端
    - Material Design 风格
    - 拖拽上传 + 智能语言搜索
@@ -125,8 +128,8 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
    - 进度数据: `{progress: 0-100, message: str, error?: str, complete?: bool}`
 
 3. **批处理策略**
-   - 默认 BATCH_SIZE=10（Google），BATCH_SIZE=5（Claude）
-   - REQUEST_DELAY=1.0s 避免速率限制
+   - LLM 引擎：`config.BATCH_SIZE` 默认 3，被 `translation_config.BATCH_CONFIG['size']=15` 覆盖 + 按字符数动态分批（`max_chars_per_batch=3000`）；Google 引擎逐条
+   - REQUEST_DELAY 避免速率限制（`BATCH_CONFIG['request_delay']=0.3` 覆盖 config 默认 1.0s）
    - 渐进式重试延迟 [1.0s, 2.0s, 4.0s]
 
 4. **配置系统层次**
@@ -146,7 +149,7 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
    ```
    用户上传文件 + 选择语言
    → POST /api/estimate-cost
-   → count_tokens_for_translation (快速) 或 count_tokens_with_api (精确)
+   → cost_estimator.estimate_cost (字符数估算，OpenRouter 不代理 count_tokens)
    → 返回 JSON: {estimated_input_tokens, estimated_output_tokens, total_cost_usd, total_cost_cny}
    → 前端显示费用明细
    ```
@@ -200,7 +203,7 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
 4. **费用估算准确性**
    - 仅字符估算：OpenRouter 不代理 `count_tokens` API，无法精确算 tokens
    - 典型误差 20-30%（UI 明确标注"估算值"）
-   - 输出倍数按语言调整（见 `cost_estimator.py` 的 `output_multipliers`）
+   - 输出倍数按语言调整（见 `cost_estimator.py` 的 `OUTPUT_LENGTH_MULTIPLIER`）
 
 5. **文件处理**
    - 上传: `uploads/` 目录（临时存储）
@@ -218,8 +221,8 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
 ### Common Development Tasks
 
 **添加新的 AI 模型**:
-1. 在 `llm_models.py` 的 `AVAILABLE_MODELS` 追加一条（含 id/name/tier/价格/context_length）
-2. 更新 `static/js/upload.js` 的 `loadDefaultModels()` fallback 列表（同步 3 档）
+1. 在 `llm_models.py` 的 `AVAILABLE_MODELS` 追加一条（含 id/name/tier/价格/context_length）—— 这是唯一必改处（定价/前端下拉/费用估算都从这里派生）
+2. （可选）同步 `static/js/upload.js` 的 `loadDefaultModels()` —— 仅 `/api/llm-models` 不可用时的离线兜底；主路径 `loadAiModels()` 已实时 fetch 该端点，新模型自动出现
 3. 验证该模型支持 OpenRouter 的 `response_format: json_schema`（用 smoke test 跑一次）
 
 **修改批处理参数**:
@@ -233,14 +236,15 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
 4. 在 `translate_llm.py` 的 `capitalization_rules` 添加大写规则
 
 **调整费用估算参数**:
-- 修改 `cost_estimator.py` 的 `output_multipliers`（各语言 expansion factor）
-- 更新 `llm_models.py` 的 `AVAILABLE_MODELS` 定价（来源：[openrouter.ai/pricing](https://openrouter.ai/pricing)）
-- 前端显示逻辑在 `templates/upload.html` 内嵌 JS
+- 修改 `cost_estimator.py` 的 `OUTPUT_LENGTH_MULTIPLIER`（各语言 expansion factor）
+- 更新 `llm_models.py` 的 `AVAILABLE_MODELS` 定价（来源：[openrouter.ai/pricing](https://openrouter.ai/pricing)）；`cost_estimator` 直接读 `get_model_info()`，定价单源
+- 前端显示逻辑在 `static/js/upload.js`（费用摘要由后端 `format_cost_summary` 生成）
 
 ### Important Constraints
 
-1. **仅处理 .js 和 .json 文件**
-   - `ALLOWED_EXTENSIONS = {"json", "js"}`
+1. **处理 .js / .json / .zip 文件**
+   - `ALLOWED_EXTENSIONS = {"json", "js", "zip"}`（单源真相在 `config.py`，`app.py` import）
+   - ZIP：解压→递归翻译 .js/.json→保持目录结构打包回 ZIP（`process_zip_archive`）
    - 前端和后端双重验证
 
 2. **多语言支持**
@@ -248,13 +252,15 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
    - 无凭证时降级到 `app.py` 内置的 `_FALLBACK_LANGUAGES`（20 种常用）
    - 使用 `@lru_cache` 缓存语言列表
 
-3. **无测试框架**
-   - 依赖手动验证（`python translate_llm.py --test` + `./setup.sh` 末尾 inline 凭证验证）
-   - 考虑添加 pytest 时需新增 `tests/` 目录
+3. **pytest 测试套件**（`tests/`，根 `conftest.py` 把仓库根入 sys.path）
+   - 跑测试：`./venv/bin/pytest`（离线，不需 API key / 凭证）；dev 依赖见 `requirements-dev.txt`
+   - 覆盖：postprocess 回归 / zh-TW 词汇 / 导入冒烟 / SoT 不变量；`setup.sh` 已接入自检
+   - 另有手动冒烟：`python translate_llm.py --test`（真打 OpenRouter，花 token）
 
 4. **无前端构建工具**
-   - 所有 CSS/JS 内嵌在 HTML 模板
-   - 修改 UI 需直接编辑 `templates/*.html`
+   - CSS/JS 为外链静态文件：`static/css/upload.css` + `static/js/upload.js`（无 webpack/vite）
+   - `templates/upload.html` 仅内联一小段 `<script>` 注入服务端渲染的 `languages` 数据
+   - 修改 UI 需直接编辑 `templates/*.html` + `static/js/upload.js` + `static/css/upload.css`
 
 5. **Session 管理**
    - Flask session 用于跟踪上传状态
