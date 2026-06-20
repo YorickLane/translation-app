@@ -16,6 +16,8 @@ MODULES = [
     "cost_estimator",
     "translate",
     "translate_llm",
+    "translation_runner",
+    "cli",
     "app",
     "check_translation_quality",
     "split_json",

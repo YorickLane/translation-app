@@ -1,7 +1,7 @@
 # app.py
 
-from translate import translate_text, translate_file, create_zip, create_zip_with_structure
-from translate_llm import translate_json_file_llm, translate_js_file_llm
+from translate import create_zip, create_zip_with_structure
+from translation_runner import translate_single_file
 from llm_models import get_models
 from cost_estimator import estimate_cost, format_cost_summary
 from flask import Flask, request, render_template, send_from_directory, flash, redirect, jsonify
@@ -184,32 +184,6 @@ def get_llm_models_api():
     except Exception as e:
         logging.error(f"获取模型列表失败: {e}")
         return jsonify({"success": False, "error": str(e), "models": []})
-
-
-def translate_single_file(file_path, target_language, translation_engine, ai_model, output_dir, progress_callback=None):
-    """
-    翻译单个文件
-    返回: (输出文件名, 输出文件完整路径)
-    """
-    file_extension = os.path.splitext(file_path)[1].lower()
-
-    if translation_engine == "openrouter":
-        if file_extension == ".json":
-            output_file_name = translate_json_file_llm(
-                file_path, target_language, progress_callback, ai_model, output_dir
-            )
-        elif file_extension == ".js":
-            output_file_name = translate_js_file_llm(
-                file_path, target_language, progress_callback, ai_model, output_dir
-            )
-        else:
-            raise ValueError(f"不支持的文件类型: {file_extension}")
-    else:
-        output_file_name = translate_file(
-            file_path, target_language, progress_callback, output_dir
-        )
-
-    return output_file_name, os.path.join(output_dir, output_file_name)
 
 
 def process_zip_archive(zip_path, target_languages, translation_engine, ai_model, output_dir, base_name, timestamp, unique_id):
