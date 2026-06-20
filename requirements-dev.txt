@@ -1,0 +1,6 @@
+# 开发 / 测试依赖（生产依赖之外）
+# 安装: ./venv/bin/pip install -r requirements-dev.txt
+# 跑测试: ./venv/bin/pytest
+-r requirements.txt
+
+pytest>=8.0

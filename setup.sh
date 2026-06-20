@@ -51,6 +51,19 @@ python -m pip install --upgrade pip
 echo "📥 安装项目依赖..."
 python -m pip install -r requirements.txt
 
+# 安装开发/测试依赖（pytest；requirements-dev.txt 内含 -r requirements.txt）
+echo "🧪 安装测试依赖..."
+python -m pip install -r requirements-dev.txt
+
+# 跑测试套件做安装自检（纯离线，不需要任何 API key / 凭证）
+echo ""
+echo "🧪 运行测试套件 (pytest)..."
+if python -m pytest -q; then
+    echo "✅ 测试全绿"
+else
+    echo "⚠️  测试未全绿（详见上方输出）"
+fi
+
 # 检查Google Cloud凭证（可选 — 语言列表 + 回退引擎）
 # 查找顺序: GOOGLE_APPLICATION_CREDENTIALS env → gcloud ADC → 项目根 fallback 文件
 echo ""
