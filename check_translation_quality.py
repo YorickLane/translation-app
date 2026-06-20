@@ -6,9 +6,9 @@
 
 import json
 import os
-import re
-from collections import defaultdict
 import argparse
+
+from translation_config import QUALITY_CHECK_RULES
 
 
 def load_json_file(filepath):
@@ -19,14 +19,9 @@ def load_json_file(filepath):
 
 def contains_english_keywords(text, lang_code):
     """检查文本是否包含英文关键词（更智能）"""
-    # 常见的英文UI词汇
-    keywords = [
-        'Please', 'Enter', 'Select', 'Password', 'Login',
-        'Settings', 'Edit', 'Delete', 'Clear', 'Copy',
-        'Download', 'Upload', 'Cancel', 'Confirm', 'Save',
-        'verification', 'progress', 'merchant', 'payment',
-        'Withdrawal', 'Payment', 'Error', 'Success'
-    ]
+    # 英文 UI 词汇 —— 用 SoT (QUALITY_CHECK_RULES)，与翻译管线同源
+    # (含 0073e88 移除 Password/Login 借词误报的决策)；工具特有豁免在下方叠加
+    keywords = QUALITY_CHECK_RULES['english_keywords']
     
     # 语言特定的豁免词汇（这些词在该语言中是正确的）
     language_exemptions = {
