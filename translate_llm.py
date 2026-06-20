@@ -58,6 +58,21 @@ LANGUAGE_NAMES = {
 }
 
 
+# 繁体中文（台湾）规则 —— zh-TW / zh-Hant 共用一份，避免两份漂移 (SoT)。
+# 词汇现代化指南直接进 LLM prompt：phrase 级、上下文感知（OpenCC 字形映射做不到），
+# 尤其 通過/透過 的 pass/via 分流只能靠 LLM 语义判断。glossary 与此处保持一致。
+_TRADITIONAL_CHINESE_TW_RULE = """- This is Traditional Chinese for TAIWAN (台灣), use traditional characters (繁體字), NOT simplified
+- NEVER return English; must translate to Traditional Chinese
+- Use idiomatic TAIWAN vocabulary, NOT mainland Chinese terms:
+  網路(not 網絡), 登入(not 登錄), 設定(not 設置), 載入(not 加載), 資訊(not 信息),
+  訊息(not 消息), 資料(not 數據), 影片(not 視頻), 搜尋(not 搜索), 複製(not 复制),
+  檔案(not 文件), 開啟(not 打開), 螢幕(not 屏幕), 帳號/帳戶(not 賬號/賬戶)
+- Context-sensitive 通過 vs 透過: use 透過 for via/through (e.g. 透過郵箱找回),
+  but 通過 for pass/approve (e.g. 審核通過). Never blindly convert one to the other.
+- Keep brands/units/i18n placeholders verbatim: USDT, LOGO, AI, {name}, ${price}, 2MB, 75px
+- Examples: 确定→確定, 保存→儲存, 设置→設定, 网络→網路, 信息→資訊"""
+
+
 CAPITALIZATION_RULES = {
     "en": """- Use title case for UI elements and buttons (e.g., "Confirm", "Cancel", "Save")
 - Use sentence case for longer phrases and messages
@@ -88,13 +103,9 @@ CAPITALIZATION_RULES = {
 - Use standard Modern Standard Arabic for UI elements
 - Examples: "تأكيد" (confirm), "إلغاء" (cancel), "الإعدادات" (settings)""",
 
-    "zh-TW": """- This is Traditional Chinese, use traditional characters (繁體字), NOT simplified
-- NEVER return English; must translate to Traditional Chinese
-- Examples: "确定" → "確定", "保存" → "儲存", "设置" → "設定" """,
+    "zh-TW": _TRADITIONAL_CHINESE_TW_RULE,
 
-    "zh-Hant": """- This is Traditional Chinese, use traditional characters (繁體字), NOT simplified
-- NEVER return English; must translate to Traditional Chinese
-- Examples: "确定" → "確定", "保存" → "儲存", "设置" → "設定" """,
+    "zh-Hant": _TRADITIONAL_CHINESE_TW_RULE,
 }
 
 GENERIC_RULE = (
