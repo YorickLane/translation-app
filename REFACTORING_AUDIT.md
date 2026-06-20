@@ -19,14 +19,15 @@
 | A.2 | `fix_translation_issues.py`+`fix_translation_auto.py` 删除 | 0 导入，用旧 buggy 检测 | 中 | 中 | quick-win（可逆 commit） | ✅ `e1618dd` |
 | B.4/DOC | CLAUDE.md 文档漂移（端点/扩展名/zip/外链 JS/批次） | 见 §4 | 高 | 小 | quick-win | ✅ `4ff424f` |
 | DOC6 | 2 个 OPTIMIZATION 文档严重过时 | Sonnet 3.5/BATCH=5/已删文件 | 中 | 小 | quick-win（归档） | ✅ `e1618dd` |
-| B.5 | 英文检测算法分散（删脚本后基本收敛） | 5 处 → 2 处 | 中 | 中 | 提案 | 📋 待批准 |
-| **D.7** | 回灌重译闭环未实现 | `strict_validation` 仅检测 | 高 | 大 | **需批准** | 📋 待批准 |
-| **D.8** | 双引擎分批/重试/进度重复 | `translate.py` vs `translate_llm.py` | 中 | 大 | **需批准** | 📋 待批准 |
-| **D.9** | 无无头 CLI（自动化/CI 不便） | 仅 Web + 库函数 | 中 | 中 | **需批准** | 📋 待批准 |
-| **D.10** | `ensure_term_consistency` 整 key 精确匹配近乎无效 | `translation_postprocess.py:107` | 中 | 中 | **需批准** | 📋 待批准 |
-| E.11-14 | 质量打磨（简繁变体/标点/tokenizer 等） | 见 §7 | 低 | 杂 | 文档化/择机 | 📋 待定 |
+| B.5 | 英文检测算法分散（check_quality 接 SoT，顺修 Password/Login 误报） | 5 处 → 2 处 | 中 | 中 | 已批准 | ✅ `b4dd834` |
+| **D.7** | 回灌重译闭环（接上 cb780b2 检测的下游） | `strict_validation` 仅检测→已闭环 | 高 | 大 | 已批准 | ✅ `4ad4946` |
+| **D.8** | 双引擎 JS 真重复（"批处理重复"前提已实测推翻，缩小到 JS） | 抽 `js_locale` + 修双引号 key bug | 中 | 中 | 已批准(缩小) | ✅ `44dae42` |
+| **D.9** | 无头 CLI（自动化/CI/批量） | `cli.py` + 抽 `translation_runner` | 中 | 中 | 已批准 | ✅ `295c3a7` |
+| **D.10** | `ensure_term_consistency` 整 key 精确匹配有限角色 | docstring + 契约测试 | 中 | 中 | 已批准 | ✅ `2cace65` |
+| D4 | `MAX_FILE_SIZE` 未接线（上传无上限） | `config.py:36` | 中 | 小 | **待限值决策** | ⏳ 待你给数值 |
+| E.11-14 | 质量打磨（简繁变体/标点/tokenizer 等） | 见 §7 | 低 | 杂 | 文档化/择机 | ⏳ 择机 |
 
-### 本轮已实现（quick-win，6 commit，全程 TDD + pytest 62 绿）
+### 已实现（quick-win + 已批准 D 类，全程 TDD，pytest 62→84 绿）
 
 | commit | 内容 |
 |---|---|
@@ -36,8 +37,17 @@
 | `488cc28` | refactor: ALLOWED_EXTENSIONS 单源真相 |
 | `e1618dd` | chore: 删 fix_translation_*（0 导入）+ 归档 OPTIMIZATION 文档 |
 | `4ff424f` | docs: CLAUDE.md 文档漂移修正 + llm_models 文档串 |
+| `295c3a7` | **D.9** 无头 CLI cli.py + 抽 translation_runner 分发 |
+| `44dae42` | **D.8(scoped)** 抽 js_locale 两引擎共用 + 修 translate.py 双引号 key bug |
+| `b4dd834` | **B.5** check_translation_quality 词表接 SoT + 清死 import |
+| `2cace65` | **D.10** ensure_term_consistency 有限角色文档化 + 契约测试 |
+| `4ad4946` | **D.7** 回灌重译闭环 + needs_review sidecar |
 
-**待你拍板**：B.5 / D.7 / D.8 / D.9 / D.10（见 §5-6）。`MAX_FILE_SIZE` 接线见 D4（下）。
+**Google 引擎决策**：保留（在用的文档化功能，无弃用信号）。故 D.8 不删 `translate.py`，
+缩小为抽 `js_locale` 去 JS 真重复（"双引擎批处理重复"前提实测站不住——Google 逐条递归
+vs LLM 扁平批处理，结构不同，强抽 = premature abstraction）。
+
+**仍待你定**：D4 `MAX_FILE_SIZE` 上传上限的数值（10/50MB 或不接）；E.11-14 择机。
 
 ### D4 — MAX_FILE_SIZE 接线（小，需限值决策）
 `config.MAX_FILE_SIZE`（10MB）当前 0 消费者；Flask 未设 `MAX_CONTENT_LENGTH` → 上传无大小上限。
