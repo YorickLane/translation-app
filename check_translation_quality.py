@@ -6,6 +6,7 @@
 
 import json
 import os
+import re
 import argparse
 
 from translation_config import QUALITY_CHECK_RULES
@@ -40,7 +41,8 @@ def contains_english_keywords(text, lang_code):
     exemptions = language_exemptions.get(lang_code, [])
     
     for keyword in keywords:
-        if keyword.lower() in text_lower:
+        # 词边界匹配（与翻译管线一致），避免罗曼同源词 substring 误报（entero≠Enter）
+        if re.search(rf'\b{re.escape(keyword)}\b', text, re.IGNORECASE):
             # 检查是否在豁免列表中
             is_exempted = False
             

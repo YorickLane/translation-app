@@ -27,6 +27,10 @@ ENGLISH_NEGATIVES = [
     "Android下載",                           # 品牌（含小写，白名单）
     "只允許上傳 png/jpg/jpeg 格式的圖片",      # 文件格式名（小写，白名单）
     "支援 gif/svg/webp/pdf 上傳",             # 更多文件格式
+    # CJK 为主、嵌入品牌/术语/括注 → 非"未翻译"（real-data: e2e Oracle / seller-h5 AI 括注 / x4 allegro）
+    "這是 Oracle 提供的企業級電子商務平台，客戶可基於它搭建自己的網路商店",
+    "結合人工智慧(Artificial Intelligence, AI)和影像辨識技術的智慧商城",
+    "Allegro的新客戶",
 ]
 
 # contains_english：真正未翻译的英文 → 应判为 True

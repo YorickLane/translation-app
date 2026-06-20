@@ -15,3 +15,14 @@ def test_still_flags_real_sot_keyword():
     hit, kw = cq.contains_english_keywords("Confirm", "ru")
     assert hit is True
     assert kw == "Confirm"
+
+
+def test_word_boundary_no_romance_cognate_false_positive():
+    """词边界：罗曼同源词不再被 substring 误报（real-data: es entero≠Enter / Cancelado≠Cancel）。"""
+    assert cq.contains_english_keywords("número entero en centavos", "es")[0] is False
+    assert cq.contains_english_keywords("Cancelado", "es")[0] is False
+
+
+def test_word_boundary_still_flags_whole_word_leak():
+    """真整词英文泄漏仍 flag。"""
+    assert cq.contains_english_keywords("Login expired, please try again", "ru")[0] is True

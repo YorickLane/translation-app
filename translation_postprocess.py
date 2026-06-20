@@ -137,25 +137,40 @@ _LATIN_ALLOW = {
     'mp3', 'mp4', 'mov', 'avi', 'wav',
 }
 
+# 判"文本是否以 CJK 为主"，用于区分"嵌入品牌/术语"与"整串未翻译英文"
+_CJK_RE = re.compile(r'[一-鿿㐀-䶿豈-﫿]')
+
 
 def contains_english(text):
-    """检查中文译文里是否【真的混入了未翻译的英文】。
+    """检查中文译文里是否【真的混入了未翻译的英文 UI 串】。
 
-    只把"含小写字母、且不在白名单里的字母词"判为英文泄漏。合法嵌入的拉丁一律放行：
-    i18n 占位符 {x}/${x}、全大写缩写 (USDT/PC/AI/LOGO/VIP)、紧邻数字的型号/单位
-    (H5/2MB/75px/1920)、品牌 (iOS/Android)。
+    判"含小写、且不在白名单"的可疑拉丁词；但文本以 CJK 为主时，可疑拉丁多是嵌入的
+    品牌/术语/括注（"...Oracle 提供..."、"人工智慧(Artificial Intelligence)"），不算
+    "未翻译" → 放行。只有纯拉丁或拉丁占多数（"Confirm" / "Please login"）才判未翻译。
 
-    旧实现（残留任意 [a-zA-Z] 即判混入）会把上述全部误杀，是 [需要重新翻译] 误标记的根因。
+    放行的合法嵌入：i18n 占位符 {x}/${x}、全大写缩写 (USDT/AI/LOGO)、紧邻数字的型号/单位
+    (H5/2MB/75px)、白名单品牌/文件格式 (iOS/Android/png)。
+
+    （CJK-为主放行规则 2026-06-20 加：real-data e2e 显示品牌 Oracle / 术语括注被误判，
+    旧"任一小写非白名单词即判"会把长句嵌入的品牌/术语误杀。）
     """
     # 1) 去掉 i18n 占位符
     t = re.sub(r'\$?\{[^}]*\}', '', text)
     # 2) 去掉紧邻数字的字母（型号/单位/规格：H5 / 2MB / 75px / 1920x1080）
     t = re.sub(r'(?<=\d)[A-Za-z]+|[A-Za-z]+(?=\d)', '', t)
-    # 3) 任一"含小写且不在白名单"的字母词 → 真英文未翻译
-    for tok in re.findall(r'[A-Za-z]+', t):
-        if any(c.islower() for c in tok) and tok.lower() not in _LATIN_ALLOW:
-            return True
-    return False
+    # 3) 收集"含小写且不在白名单"的可疑词
+    suspects = [
+        tok for tok in re.findall(r'[A-Za-z]+', t)
+        if any(c.islower() for c in tok) and tok.lower() not in _LATIN_ALLOW
+    ]
+    if not suspects:
+        return False
+    # 4) CJK 占比 ≥30% → "翻译好 + 嵌入品牌/术语/括注"，放行；纯拉丁或拉丁压倒多数才判未翻译
+    cjk = len(_CJK_RE.findall(t))
+    latin_len = sum(len(tok) for tok in suspects)
+    if cjk and cjk / (cjk + latin_len) >= 0.3:
+        return False
+    return True
 
 
 # OpenCC 简繁检测（确定性，零 LLM）。检测基准用 s2tw 而非 s2t：s2t 会把 才→纔 这类古字误判，
