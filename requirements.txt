@@ -11,6 +11,9 @@ openai>=1.50.0
 # SOCKS proxy support for httpx (上海环境走 clash SOCKS)
 httpx[socks]>=0.27.0
 
+# 简繁检测（QA 闸：检出 zh-TW 译文里的简体残留；纯 Python，无系统依赖）
+opencc-python-reimplemented>=0.1.7
+
 # Async support: Flask-SocketIO async_mode='threading' (stdlib，无需 eventlet/gevent)
 # 参见 Miguel Grinberg 当前推荐：github.com/miguelgrinberg/Flask-SocketIO/discussions/2037
 
