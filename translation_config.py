@@ -16,6 +16,10 @@ BATCH_CONFIG = {
     "max_chars_per_batch": 3000,  # 每批最大字符数（避免超过 token 限制）
     "min_batch_size": 2,  # 最小批次大小（长文本保护）
     "max_batch_size": 25,  # 最大批次大小
+
+    # D.7 QA 回灌重译闭环（仅 strict 语言 zh-TW/zh-Hant/ar）
+    "qa_retranslate": True,  # 译后检测残留(英文/简体)并自动重译 flagged
+    "qa_max_rounds": 1,      # 每文件最多回灌轮数（防 token 失控）
 }
 
 # 语言代码映射（解决API兼容性问题）

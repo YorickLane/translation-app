@@ -25,6 +25,7 @@ try:
         TEMPERATURE_BY_LANGUAGE,
         LANGUAGE_CODE_MAPPING,
         BATCH_CONFIG,
+        VALIDATION_STRENGTH,
     )
     from translation_postprocess import post_process_translation
     USE_ADVANCED_CONFIG = True
@@ -225,6 +226,52 @@ def _get_retry_delay(attempt):
     return REQUEST_DELAY * 2
 
 
+# ---------- D.7 QA 回灌重译闭环 ----------
+
+def _detect_flagged(translated_data, target_language):
+    """用确定性检测器找需重译的 key。返回 [(key, reason)]。"""
+    from translation_postprocess import contains_english, contains_simplified
+    is_zh_hant = target_language in ('zh-TW', 'zh-Hant')
+    flagged = []
+    for key, value in translated_data.items():
+        if not isinstance(value, str):
+            continue
+        if target_language != 'en' and contains_english(value):
+            flagged.append((key, '英文未翻译'))
+        elif is_zh_hant and contains_simplified(value):
+            flagged.append((key, '简体残留'))
+    return flagged
+
+
+def qa_retranslate(translated_data, source_data, target_language, model,
+                   max_rounds=1, progress_callback=None):
+    """QA 回灌重译闭环：检测 flagged → 用原文重译 → 复检；剩余的返回供人工队列。
+
+    复用 translation_postprocess 的确定性检测器(contains_english / contains_simplified)。
+    只对 strict 语言(zh-TW/zh-Hant/ar)有意义。受 max_rounds 限制防 token 失控。
+
+    Returns: (translated_data, remaining_flagged)；remaining_flagged: [(key, value, reason)]
+    """
+    flagged = _detect_flagged(translated_data, target_language)
+    rounds = 0
+    while flagged and rounds < max_rounds:
+        rounds += 1
+        to_fix = {k: source_data[k] for k, _ in flagged if k in source_data}
+        if not to_fix:
+            break
+        if progress_callback:
+            progress_callback(100, f"QA 回灌重译 {len(to_fix)} 项（第 {rounds}/{max_rounds} 轮）")
+        try:
+            retranslated = translate_with_llm(to_fix, target_language, model)
+            translated_data.update(retranslated)
+        except Exception as e:
+            logger.error(f"QA 回灌重译失败: {e}")
+            break
+        flagged = _detect_flagged(translated_data, target_language)
+    remaining = [(k, translated_data.get(k), reason) for k, reason in flagged]
+    return translated_data, remaining
+
+
 # ---------- JSON 文件翻译 ----------
 
 def translate_json_file_llm(
@@ -299,12 +346,34 @@ def translate_json_file_llm(
             delay = BATCH_CONFIG.get('request_delay', REQUEST_DELAY) if USE_ADVANCED_CONFIG else REQUEST_DELAY
             time.sleep(delay)
 
+    # D.7 QA 回灌重译闭环（仅 strict 语言；可经 BATCH_CONFIG['qa_retranslate'] 关闭）
+    needs_review = []
+    if (USE_ADVANCED_CONFIG and BATCH_CONFIG.get('qa_retranslate', True)
+            and VALIDATION_STRENGTH.get(target_language) == 'strict'):
+        max_rounds = BATCH_CONFIG.get('qa_max_rounds', 1)
+        translated_data, needs_review = qa_retranslate(
+            translated_data, data, target_language, selected_model,
+            max_rounds=max_rounds, progress_callback=progress_callback,
+        )
+
     # 保存
     output_file = f"{source_base}_{target_language}.json"
     output_path = os.path.join(output_dir, output_file)
     os.makedirs(output_dir, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(translated_data, f, ensure_ascii=False, indent=2)
+
+    # D.7 人工复审队列：QA 回灌后仍未过的写 sidecar（非阻塞，交付物不受影响）
+    if needs_review:
+        review_path = os.path.join(
+            output_dir, f"{source_base}_{target_language}.needs_review.json"
+        )
+        with open(review_path, "w", encoding="utf-8") as f:
+            json.dump(
+                [{"key": k, "value": v, "reason": r} for k, v, r in needs_review],
+                f, ensure_ascii=False, indent=2,
+            )
+        logger.warning(f"[{target_language}] {len(needs_review)} 项 QA 未过，写入 {review_path}")
 
     _report_completion(progress_callback, selected_model, failed_batches)
     return output_file
