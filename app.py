@@ -31,6 +31,7 @@ UPLOAD_FOLDER = "uploads"
 OUTPUT_FOLDER = "output"
 # ALLOWED_EXTENSIONS 单源真相在 config.py（上方 import），勿在此另立副本
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+app.config["MAX_CONTENT_LENGTH"] = config.MAX_FILE_SIZE  # D4: 上传上限 50MB，超限 → 413
 
 # Google Translate Client —— lazy init，凭证缺失时降级到 fallback 语言列表
 # 这样 OpenRouter 引擎路径不受 Google 凭证影响，独立可用
