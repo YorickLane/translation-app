@@ -232,7 +232,7 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
 **优化特定语言翻译**:
 1. 在 `translation_config.py` 添加 `TEMPERATURE_BY_LANGUAGE` 条目
 2. 在 `VALIDATION_STRENGTH` 设置验证级别
-3. 在 `TERM_GLOSSARY` 添加常用术语
+3. 在 `TERM_GLOSSARY` 添加常用术语（**整 key 精确匹配兜底**，仅对"单词即 key"的 UI 词生效；句子 key 不触发——术语现代化主杠杆是 prompt 指南 `_TRADITIONAL_CHINESE_TW_RULE`）
 4. 在 `translate_llm.py` 的 `capitalization_rules` 添加大写规则
 
 **调整费用估算参数**:

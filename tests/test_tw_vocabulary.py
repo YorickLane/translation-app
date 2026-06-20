@@ -43,3 +43,12 @@ def test_ensure_term_consistency_enforces_taiwan_terms():
 def test_prompt_carries_taiwan_vocab(lang, term):
     rule = translate_llm.CAPITALIZATION_RULES[lang]
     assert term in rule
+
+
+def test_ensure_term_consistency_whole_key_only():
+    """D.10 契约: 整 key 精确匹配才生效；句子 key(含术语子串)不被改。"""
+    # 精确 key → 强制
+    assert pp.ensure_term_consistency({"网络": "網絡"}, "zh-TW")["网络"] == "網路"
+    # 句子 key 含"网络"但非精确 key → 不动（不做子串替换）
+    out = pp.ensure_term_consistency({"请检查网络连接": "請檢查網絡連線"}, "zh-TW")
+    assert out["请检查网络连接"] == "請檢查網絡連線"

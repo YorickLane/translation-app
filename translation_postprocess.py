@@ -105,7 +105,13 @@ def apply_post_processing_rules(data, target_lang):
 
 
 def ensure_term_consistency(data, target_lang, source_lang='zh-CN'):
-    """确保术语翻译一致性"""
+    """术语一致性兜底 —— 【整 key 精确匹配】，仅对"单词即 key"的 UI 词生效。
+
+    限制(重要)：只有当 data 的 key 精确等于 glossary 的 key（如 key == "网络"）才强制；
+    真实语言包 key 多为整句，几乎不触发。术语现代化的【主杠杆是 prompt 指南】
+    (translate_llm._TRADITIONAL_CHINESE_TW_RULE，phrase 级、上下文感知)，本函数只是
+    确定性兜底。不做子串替换（会误伤句中片段，需词边界/白名单，得不偿失）。
+    """
     if target_lang not in TERM_GLOSSARY:
         return data
     
