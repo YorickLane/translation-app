@@ -153,6 +153,7 @@ REQUIREMENTS:
 2. Return exactly {len(values)} translations in the same order as input
 3. Preserve placeholders (like {{{{0}}}}, %s, {{name}}), HTML tags, and special formatting
 4. Keep the meaning and tone appropriate for UI / application strings
+5. These are UI labels/strings — translate ONLY the given text, literally and at the same scope. Do NOT expand a short label into a sentence, and do NOT add explanations, descriptions, or marketing copy.
 {cap_section}
 Input strings ({len(values)} items):
 {json_input}
