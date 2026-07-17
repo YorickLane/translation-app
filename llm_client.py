@@ -13,6 +13,7 @@ import logging
 from typing import Optional
 from openai import OpenAI, APIError
 from config import OPENROUTER_API_KEY
+from llm_models import get_model_info
 
 logger = logging.getLogger(__name__)
 
@@ -84,8 +85,8 @@ def translate_batch(
         values: 待翻译的字符串列表
         target_lang_name: 语言全名 (e.g. "Spanish", "Arabic")
         target_lang_code: 语言代码，仅用于 prompt 内提示 (e.g. "es", "ar")
-        model: OpenRouter model slug (e.g. "anthropic/claude-sonnet-4.6")
-        temperature: 采样温度
+        model: OpenRouter model slug (e.g. "anthropic/claude-sonnet-5")
+        temperature: 采样温度（模型目录标记不支持时自动省略，如 Claude Sonnet 5）
         capitalization_rule: 语言特定大写规则说明（直接注入 prompt）
         max_tokens: 输出上限
 
@@ -103,13 +104,22 @@ def translate_batch(
 
     logger.info(f"[OpenRouter] 调用 {model} 翻译 {len(values)} 项 → {target_lang_name}")
 
+    # Claude Sonnet 5 / Opus 4.7+ 拒绝非默认 temperature（400）——按目录标记条件传参；
+    # 目录外的未知模型按支持处理
+    info = get_model_info(model)
+    sampling_kwargs = {}
+    if info is None or info["supports_temperature"]:
+        sampling_kwargs["temperature"] = temperature
+    else:
+        logger.debug(f"[OpenRouter] {model} 不支持 temperature，已省略该参数")
+
     response = _get_client().chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": prompt}],
         max_tokens=max_tokens,
-        temperature=temperature,
         response_format=_TRANSLATION_SCHEMA,
         extra_headers=_ATTRIBUTION_HEADERS,
+        **sampling_kwargs,
     )
 
     raw = response.choices[0].message.content
@@ -161,7 +171,7 @@ Input strings ({len(values)} items):
 Return the translations as the `translations` field of a JSON object."""
 
 
-def test_connectivity(model: str = "anthropic/claude-sonnet-4.6") -> bool:
+def test_connectivity(model: str = "anthropic/claude-sonnet-5") -> bool:
     """冒烟测试：验证 OR API key + 网络 + 模型可达。"""
     try:
         result = translate_batch(
@@ -181,5 +191,5 @@ def test_connectivity(model: str = "anthropic/claude-sonnet-4.6") -> bool:
 
 if __name__ == "__main__":
     import sys
-    model = sys.argv[1] if len(sys.argv) > 1 else "anthropic/claude-sonnet-4.6"
+    model = sys.argv[1] if len(sys.argv) > 1 else "anthropic/claude-sonnet-5"
     test_connectivity(model)

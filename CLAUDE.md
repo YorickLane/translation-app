@@ -91,7 +91,7 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
 
 6. **llm_models.py** - AI 模型目录（替代旧 claude_models.py）
    - 硬编码 3 档模型（不做 runtime API 发现）：
-     - 质量档: `anthropic/claude-sonnet-4.6` ⭐ ($3/$15 per MTok)
+     - 质量档: `anthropic/claude-sonnet-5` ⭐ ($2/$10 per MTok 首发优惠至 2026-08-31，之后 $3/$15；不支持 temperature 参数)
      - 备选档: `openai/gpt-5.4` ✨ ($2.50/$15)
      - 经济档: `google/gemini-3.1-flash-lite-preview` 💰 ($0.25/$1.50，比 Sonnet 便宜 12x)
    - 新增模型 = 改 AVAILABLE_MODELS 常量
@@ -159,7 +159,7 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
 - **config.py**: 基础配置（遵循全局 secrets SoT —— 不用 .env 文件）
   - `TRANSLATION_ENGINE`: 'google' | 'openrouter'
   - `OPENROUTER_API_KEY`: 从 shell env 读取，来源 `~/.config/secrets.env`（详见 `~/claude-soul/protocols/secrets-management.md`）
-  - `DEFAULT_MODEL`: 默认 `'anthropic/claude-sonnet-4.6'`
+  - `DEFAULT_MODEL`: 默认 `'anthropic/claude-sonnet-5'`
   - `BATCH_SIZE`, `REQUEST_DELAY`, `MAX_RETRIES`
   - Google credentials: 查找顺序 `GOOGLE_APPLICATION_CREDENTIALS` env → gcloud ADC → `./google-credentials.json` → `./serviceKey.json` (legacy)
 
@@ -189,7 +189,7 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
    - 参考：[Flask-SocketIO Discussion #2037](https://github.com/miguelgrinberg/Flask-SocketIO/discussions/2037)
 
 2. **AI 模型选择**
-   - 必须在 `translate_json_file_llm()` 调用时传递 `model` 参数（OpenRouter slug 如 `anthropic/claude-sonnet-4.6`）
+   - 必须在 `translate_json_file_llm()` 调用时传递 `model` 参数（OpenRouter slug 如 `anthropic/claude-sonnet-5`）
    - 模型从前端表单 `request.form.get("ai_model")` 获取
    - 每次 API 调用记录使用的模型：`logger.info(f"[OpenRouter] 调用 {model}")`
    - 所有 3 档模型都需支持 `response_format: json_schema` —— Claude Sonnet 4.5+ / GPT-4o+ / Gemini 已确认支持
@@ -213,8 +213,9 @@ python cost_estimator.py uploads/your-file.json es,fr,de,ar,it,pt
 
 ### Model Currency Notice（2026-04-22 校准）
 
-- **Claude 当前生产推荐**: Sonnet 4.6 (`anthropic/claude-sonnet-4.6` 经 OR) / Opus 4.7
-- **已变 legacy**: Sonnet 4.5 / Opus 4.5 / Opus 4.6（仍可用，有更优选）
+- **Claude 当前生产推荐**: Sonnet 5 (`anthropic/claude-sonnet-5` 经 OR，2026-07-18 更新) / Opus 4.8
+- **已变 legacy**: Sonnet 4.6 / Sonnet 4.5 / Opus 4.5-4.7（仍可用，有更优选）
+- **Sonnet 5 注意**: 不接受非默认 temperature/top_p/top_k（400）——llm_client 按 `supports_temperature` 目录标记自动省略；新 tokenizer 同文本 token 数约 +30%，字符估算系数如需精调看 cost_estimator
 - **Anthropic 直连付款卡问题**：本项目不再调 Anthropic 直连 SDK；全部走 OpenRouter 统一入口
 - **OpenRouter 零加价** pass-through provider 原价（见 [openrouter.ai/pricing](https://openrouter.ai/pricing)）
 

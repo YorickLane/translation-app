@@ -20,25 +20,26 @@ class ModelInfo(TypedDict):
     output_price_per_m: float  # USD per 1M output tokens
     context_length: int
     default: bool
+    supports_temperature: bool  # Claude Sonnet 5 / Opus 4.7+ 拒绝非默认 temperature（400）
 
 
-# 模型目录（2026-04-22 校准自 https://openrouter.ai/api/v1/models）
+# 模型目录（2026-07-18 校准自 https://openrouter.ai/api/v1/models）
 #
-# ⚠️ Opus 4.7+ breaking change: 设 temperature/top_p/top_k 为非默认值会 400 error
-#    (源: platform.claude.com/docs/en/about-claude/models/whats-new, 2026-04-22)
-#    如果未来加 `anthropic/claude-opus-4.7` 或 `anthropic/claude-opus-5*` 进这个 list，
-#    必须先在 llm_client.py 的 translate_batch() 里按 slug 条件化 strip 掉 temperature。
-#    当前 3 档（Sonnet 4.6 / GPT-5.4 / Gemini Flash Lite）都支持 temperature，无需处理。
+# ⚠️ Claude Sonnet 5 / Opus 4.7+ breaking change: 设 temperature/top_p/top_k 为非默认值会 400 error
+#    llm_client.translate_batch() 按 supports_temperature 标记条件化传参 —— 新增此类模型时
+#    把 supports_temperature 设为 False 即可，语言温度调优由 prompt 规则（如
+#    translate_llm._TRADITIONAL_CHINESE_TW_RULE）+ 验证重试兜底。
 AVAILABLE_MODELS: list[ModelInfo] = [
     {
-        "id": "anthropic/claude-sonnet-4.6",
-        "name": "Claude Sonnet 4.6 ⭐",
-        "description": "质量档 — 翻译质量标杆，多语言稳定，推荐生产默认",
+        "id": "anthropic/claude-sonnet-5",
+        "name": "Claude Sonnet 5 ⭐",
+        "description": "质量档 — 编码/agentic 接近 Opus 级，推荐生产默认（首发优惠价至 2026-08-31，之后 $3/$15）",
         "tier": "quality",
-        "input_price_per_m": 3.00,
-        "output_price_per_m": 15.00,
+        "input_price_per_m": 2.00,
+        "output_price_per_m": 10.00,
         "context_length": 1_000_000,
         "default": True,
+        "supports_temperature": False,
     },
     {
         "id": "openai/gpt-5.4",
@@ -49,6 +50,7 @@ AVAILABLE_MODELS: list[ModelInfo] = [
         "output_price_per_m": 15.00,
         "context_length": 1_050_000,
         "default": False,
+        "supports_temperature": True,
     },
     {
         "id": "google/gemini-3.1-flash-lite-preview",
@@ -59,6 +61,7 @@ AVAILABLE_MODELS: list[ModelInfo] = [
         "output_price_per_m": 1.50,
         "context_length": 1_048_576,
         "default": False,
+        "supports_temperature": True,
     },
 ]
 

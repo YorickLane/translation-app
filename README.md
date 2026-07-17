@@ -14,7 +14,7 @@
 - 📦 **批量输出**：一键下载包含所有语言的ZIP文件
 - 🎨 **现代化UI**：Material Design风格，优雅的动画效果
 - 💰 **费用预估**：AI 翻译实时字符估算和费用预估（支持美元/人民币）
-- 🤖 **多引擎支持**：Google Translate API 和 OpenRouter AI（3 档模型：Claude Sonnet 4.6 / GPT-5.4 / Gemini Flash Lite）
+- 🤖 **多引擎支持**：Google Translate API 和 OpenRouter AI（3 档模型：Claude Sonnet 5 / GPT-5.4 / Gemini Flash Lite）
 - 🚀 **用户体验**：智能表单验证，一键操作
 
 ## 系统要求
@@ -148,7 +148,7 @@ python app.py            # 启动应用
 
 ### 4. 选择翻译引擎（可选）
 - **OpenRouter AI**（默认，推荐）：3 档 AI 模型，统一 OpenAI 兼容 API，零 markup 透传 provider 价格
-  - 质量档 ⭐：`anthropic/claude-sonnet-4.6` — $3/$15 per MTok（生产推荐）
+  - 质量档 ⭐：`anthropic/claude-sonnet-5` — $2/$10 per MTok 首发优惠至 2026-08-31，之后 $3/$15（生产推荐）
   - 备选档 ✨：`openai/gpt-5.4` — $2.50/$15 per MTok（同价位替代）
   - 经济档 💰：`google/gemini-3.1-flash-lite-preview` — $0.25/$1.50 per MTok（比 Sonnet 便宜 12x）
 - **Google Translate**：免费额度内无需付费，作为 fallback

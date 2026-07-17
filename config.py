@@ -30,7 +30,7 @@ GOOGLE_CREDENTIALS_FILENAMES = ("google-credentials.json", "serviceKey.json")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 
 # 默认 LLM 模型（见 llm_models.AVAILABLE_MODELS）
-DEFAULT_MODEL = os.environ.get("DEFAULT_MODEL", "anthropic/claude-sonnet-4.6")
+DEFAULT_MODEL = os.environ.get("DEFAULT_MODEL", "anthropic/claude-sonnet-5")
 
 # 上传大小上限 —— 已接线为 Flask MAX_CONTENT_LENGTH（app.py）；>此值的上传返回 413。
 # 50MB 容得下大 ZIP 多语言包（实测最大单包 ru.json ~79KB，远低于此）。

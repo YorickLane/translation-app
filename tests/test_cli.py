@@ -15,7 +15,7 @@ def test_parser_basic():
 def test_list_models(capsys):
     rc = cli.main(["--list-models"])
     assert rc == 0
-    assert "anthropic/claude-sonnet-4.6" in capsys.readouterr().out
+    assert "anthropic/claude-sonnet-5" in capsys.readouterr().out
 
 
 def test_missing_source_errors():

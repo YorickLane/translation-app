@@ -816,7 +816,7 @@ function renderAiModelOptions(models) {
 // 默认模型列表（后端 /api/llm-models 不可用时兜底）
 function loadDefaultModels() {
     const defaultModels = [
-        { id: 'anthropic/claude-sonnet-4.6', name: 'Claude Sonnet 4.6 ⭐', description: '质量档 — 翻译质量标杆，推荐生产默认', default: true },
+        { id: 'anthropic/claude-sonnet-5', name: 'Claude Sonnet 5 ⭐', description: '质量档 — 编码/agentic 接近 Opus 级，推荐生产默认', default: true },
         { id: 'openai/gpt-5.4', name: 'GPT-5.4 ✨', description: '备选档 — 同价位替代方案，推理强' },
         { id: 'google/gemini-3.1-flash-lite-preview', name: 'Gemini 3.1 Flash Lite 💰', description: '经济档 — 比 Sonnet 便宜 12x，适合大批量' }
     ];
