@@ -27,6 +27,15 @@ function triggerDownload(filePath) {
     document.body.removeChild(link);
 }
 
+// 工具函数：HTML 转义 —— 所有拼进 innerHTML 的不可控字符串（文件名、后端错误、
+// ZIP 成员名回传的 warnings）必须先过这里，否则恶意 ZIP 条目名如
+// `<img src=x onerror=...>.json` 会在队列 UI 里执行脚本（XSS）。
+function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+}
+
 // Socket.IO 连接
 const socket = io.connect("http://" + document.domain + ":" + location.port + "/test", {
     reconnection: true,
@@ -58,19 +67,10 @@ socket.on("connect", function () {
 
       progressText.innerText = displayText;
 
-      // 检查是否完成 - 只在非批量处理模式下自动下载
-      if (data.complete && data.redirect_url && !isProcessing) {
-          // 延迟一下让用户看到100%完成
-          setTimeout(() => {
-              // 提取 ZIP 文件路径并直接下载
-              const zipPath = extractZipPath(data.redirect_url);
-              if (zipPath) {
-                  triggerDownload(zipPath);
-                  // 显示成功消息
-                  alert('翻译完成！文件下载已开始。\n\n如需再次下载，请查看浏览器的下载记录。');
-              }
-          }, 500);
-      }
+      // 新契约：socket progress 事件只更新进度条/状态文本，不再据此判定完成或自动下载。
+      // 完成/失败一律以 /translate 的 fetch 响应 JSON 为准（见 translateFile）；
+      // 单文件自动下载改由 fetch 结果驱动（见表单提交完成处）。
+      // 说明：原先的 `!isProcessing` 分支恒假（表单提交总会先置 isProcessing=true），属死代码，已删除。
   });
 
 // 文件上传处理
@@ -156,6 +156,7 @@ function handleFileSelection(files) {
                     progress: 0,
                     error: null,
                     result: null,
+                    warnings: null,  // 部分语言失败时的警告列表（仍算成功）
                     isZip: fileExtension === '.zip'  // 标记 ZIP 文件
                 });
             } else {
@@ -214,11 +215,12 @@ function updateFileQueueUI() {
             <div class="queue-item" data-id="${item.id}">
                 <div class="queue-item-icon">${icon}</div>
                 <div class="queue-item-info">
-                    <div class="queue-item-name">${fileTypeIcon}${item.file.name}${fileTypeLabel}</div>
+                    <div class="queue-item-name">${fileTypeIcon}${escapeHtml(item.file.name)}${fileTypeLabel}</div>
                     <div class="queue-item-details">
                         ${(item.file.size / 1024).toFixed(1)} KB
-                        ${item.error ? ` • <span style="color: #dc3545;">${item.error}</span>` : ''}
+                        ${item.error ? ` • <span style="color: #dc3545;">${escapeHtml(item.error)}</span>` : ''}
                         ${item.result ? ` • <span style="color: #28a745;">翻译完成</span>` : ''}
+                        ${item.warnings && item.warnings.length ? ` • <span style="color: #f39c12;">部分语言失败: ${item.warnings.map(escapeHtml).join('；')}</span>` : ''}
                     </div>
                     ${item.status === 'processing' ? `
                         <div class="queue-item-progress">
@@ -255,7 +257,7 @@ function updateFileQueueUI() {
     if (fileQueue.length === 1) {
         fileInfo.innerHTML = `
             <i class="fas fa-file-code"></i>
-            <strong>${fileQueue[0].file.name}</strong> (${(fileQueue[0].file.size / 1024).toFixed(1)} KB)
+            <strong>${escapeHtml(fileQueue[0].file.name)}</strong> (${(fileQueue[0].file.size / 1024).toFixed(1)} KB)
         `;
         fileInfo.style.display = 'block';
     } else {
@@ -303,6 +305,8 @@ function removeFile(index) {
 function retryFile(index) {
     fileQueue[index].status = 'waiting';
     fileQueue[index].error = null;
+    fileQueue[index].result = null;
+    fileQueue[index].warnings = null;
     fileQueue[index].progress = 0;
     updateFileQueueUI();
 }
@@ -555,6 +559,14 @@ document.getElementById('translateForm').addEventListener('submit', async (e) =>
     const completedCount = fileQueue.filter(f => f.status === 'completed').length;
     const failedCount = fileQueue.filter(f => f.status === 'failed').length;
 
+    // 单文件（非批量）成功时自动下载：原 socket 自动下载分支恒假，已删除，改由 fetch 结果驱动。
+    if (fileQueue.length === 1 && fileQueue[0].status === 'completed' && fileQueue[0].result) {
+        const zipPath = extractZipPath(fileQueue[0].result);
+        if (zipPath) {
+            triggerDownload(zipPath);
+        }
+    }
+
     if (failedCount === 0) {
         alert(`🎉 批量翻译完成！\n成功: ${completedCount} 个文件`);
     } else {
@@ -604,6 +616,7 @@ async function processQueue() {
 }
 
 // 翻译单个文件
+// 新契约：完成/失败一律以 /translate 的 fetch 响应 JSON 为准；socket progress 只更新进度条。
 async function translateFile(fileItem) {
     return new Promise((resolve, reject) => {
         const formData = new FormData();
@@ -624,55 +637,72 @@ async function translateFile(fileItem) {
             formData.append('ai_model', aiModel);
         }
 
-        let checkCompleteInterval = null;
+        // 新契约：带上当前 socket sid，后端据此定向 emit 进度（sid 缺失时后端退回全局广播）
+        formData.append('socket_sid', socket.id || '');
 
-        // 监听这个文件的进度更新
+        let timeoutTimer = null;
+
+        // 进度事件只更新进度条/状态文本，不再写 fileItem.result，也不作为完成依据
+        // （消除多客户端进度串台对本文件完成判定的影响）
         const progressHandler = (data) => {
             fileItem.progress = data.progress || 0;
-
-            // 捕获完成信号和下载链接
-            if (data.complete && data.redirect_url) {
-                fileItem.result = data.redirect_url;
-                console.log(`文件 ${fileItem.file.name} 完成，下载链接: ${data.redirect_url}`);
-            }
-
             updateFileQueueUI();
         };
 
         socket.on('progress', progressHandler);
 
-        // 使用AJAX提交
+        // 统一清理：解绑进度监听 + 清除超时兜底计时器。所有完成/失败路径都必须调用。
+        const cleanup = () => {
+            socket.off('progress', progressHandler);
+            if (timeoutTimer) {
+                clearTimeout(timeoutTimer);
+                timeoutTimer = null;
+            }
+        };
+
+        // 超时兜底 (10分钟)：作为最后防线，任何正常路径都会先经 cleanup 清除它
+        timeoutTimer = setTimeout(() => {
+            cleanup();
+            reject(new Error('翻译超时'));
+        }, 600000);
+
+        // 使用 AJAX 提交，以响应 JSON 判定成功/失败
         fetch('/translate', {
             method: 'POST',
             body: formData
         })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('翻译请求失败');
+        .then(async (response) => {
+            let data = null;
+            try {
+                data = await response.json();
+            } catch (parseErr) {
+                // JSON 解析失败：给通用错误
+                cleanup();
+                reject(new Error('服务器返回了无法解析的响应'));
+                return;
             }
-            // 等待完成信号
-            checkCompleteInterval = setInterval(() => {
-                if (fileItem.progress >= 100 || (fileItem.result && fileItem.progress > 90)) {
-                    clearInterval(checkCompleteInterval);
-                    socket.off('progress', progressHandler);
-                    resolve();
-                }
-            }, 500);
 
-            // 超时保护 (10分钟)
-            setTimeout(() => {
-                if (checkCompleteInterval) {
-                    clearInterval(checkCompleteInterval);
-                }
-                socket.off('progress', progressHandler);
-                reject(new Error('翻译超时'));
-            }, 600000);
-        })
-        .catch(error => {
-            if (checkCompleteInterval) {
-                clearInterval(checkCompleteInterval);
+            if (response.ok && data && data.success) {
+                // 成功：用响应里的 redirect_url / zip_path 填充结果，供下载按钮 / 单文件自动下载使用
+                fileItem.result = data.redirect_url
+                    || (data.zip_path ? `/success?zip_path=${data.zip_path}` : null);
+                fileItem.progress = 100;
+                // 部分语言失败仍算成功，保存警告用于展示
+                fileItem.warnings = (Array.isArray(data.errors) && data.errors.length > 0)
+                    ? data.errors
+                    : null;
+                cleanup();
+                resolve();
+            } else {
+                // 失败：优先展示后端返回的中文错误消息
+                const message = (data && data.error) ? data.error : '翻译失败';
+                cleanup();
+                reject(new Error(message));
             }
-            socket.off('progress', progressHandler);
+        })
+        .catch((error) => {
+            // 网络错误等
+            cleanup();
             reject(error);
         });
     });
@@ -704,56 +734,105 @@ function selectEngine(element, engine) {
 }
 
 // 费用预估函数
+// 数据源为文件队列 fileQueue；后端仅支持 JSON 文件预估，多个 JSON 时串行汇总总价。
 async function estimateCost() {
     const estimateBtn = document.getElementById('estimateBtn');
     const costEstimation = document.getElementById('costEstimation');
     const estimationContent = document.getElementById('estimationContent');
-    
-    // 检查文件和语言
-    if (!fileInput.files[0] || selectedLanguages.size === 0) {
-        alert('请先选择文件和目标语言');
+
+    // 检查语言
+    if (selectedLanguages.size === 0) {
+        alert('请先选择目标语言');
         return;
     }
-    
-    // 准备表单数据
-    const formData = new FormData();
-    formData.append('file', fileInput.files[0]);
-    
-    // 添加选中的语言
-    selectedLanguages.forEach(code => {
-        formData.append('languages', code);
+
+    costEstimation.style.display = 'block';
+
+    // 后端费用预估仅支持 .json 文件（.js / .zip 无法估算），从队列筛出可估文件
+    const jsonItems = fileQueue.filter(item => {
+        const ext = '.' + item.file.name.split('.').pop().toLowerCase();
+        return ext === '.json';
     });
-    
-    // 添加翻译引擎和模型
-    formData.append('translation_engine', 'openrouter');
+
+    if (jsonItems.length === 0) {
+        // 队列里没有可估算的 JSON 文件，给出明确提示（不发请求）
+        estimationContent.textContent =
+            '⚠️ 费用预估仅支持 .json 文件，当前队列中没有可估算的 JSON 文件（.js / .zip 暂不支持预估）。';
+        return;
+    }
+
     const aiModel = document.getElementById('aiModel').value;
-    formData.append('ai_model', aiModel);
 
     // 显示加载状态
-    costEstimation.style.display = 'block';
     const loadingSpinner = document.createElement('div');
     loadingSpinner.className = 'loading-spinner';
     loadingSpinner.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 计算中...';
     estimationContent.replaceChildren(loadingSpinner);
     estimateBtn.disabled = true;
-    
+
     try {
-        const response = await fetch('/api/estimate-cost', {
-            method: 'POST',
-            body: formData
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            // 显示格式化的预估信息
-            estimationContent.innerHTML = data.formatted_summary || '无法获取预估信息';
-        } else {
-            estimationContent.innerHTML = `❌ 错误: ${data.error || '预估失败'}`;
+        const perFileSummaries = [];
+        const failures = [];
+        let totalCostUsd = 0;
+        let totalCostCny = 0;
+        let totalInputTokens = 0;
+        let totalOutputTokens = 0;
+        let successCount = 0;
+
+        // 逐个 JSON 文件请求并汇总（串行即可）
+        for (const item of jsonItems) {
+            const formData = new FormData();
+            formData.append('file', item.file);
+            selectedLanguages.forEach(code => formData.append('languages', code));
+            formData.append('translation_engine', 'openrouter');
+            formData.append('ai_model', aiModel);
+
+            let data = null;
+            try {
+                const response = await fetch('/api/estimate-cost', {
+                    method: 'POST',
+                    body: formData
+                });
+                data = await response.json();
+            } catch (e) {
+                failures.push(`${item.file.name}: 请求失败`);
+                continue;
+            }
+
+            if (data && data.success) {
+                successCount++;
+                const est = data.estimation || {};
+                totalCostUsd += Number(est.total_cost_usd) || 0;
+                totalCostCny += Number(est.total_cost_cny) || 0;
+                totalInputTokens += Number(est.estimated_input_tokens) || 0;
+                totalOutputTokens += Number(est.estimated_output_tokens) || 0;
+                perFileSummaries.push(`【${item.file.name}】\n${data.formatted_summary || ''}`);
+            } else {
+                failures.push(`${item.file.name}: ${(data && data.error) || '预估失败'}`);
+            }
         }
+
+        // 组装展示文本（.estimation-content 为 white-space: pre-wrap，可直接渲染换行）
+        const parts = [];
+        if (successCount > 1) {
+            parts.push(
+                `📦 汇总（${successCount} 个 JSON 文件）\n` +
+                `━━━━━━━━━━━━━━━━━━━━━━\n` +
+                `📈 总 Token: 输入 ${totalInputTokens.toLocaleString()} / 输出 ${totalOutputTokens.toLocaleString()}\n` +
+                `💰 总费用: $${totalCostUsd.toFixed(4)} (≈ ¥${totalCostCny.toFixed(4)})`
+            );
+        }
+        if (perFileSummaries.length > 0) {
+            parts.push(perFileSummaries.join('\n'));
+        }
+        if (failures.length > 0) {
+            parts.push(`⚠️ 以下文件预估失败:\n${failures.join('\n')}`);
+        }
+
+        estimationContent.textContent = parts.length > 0 ? parts.join('\n') : '无法获取预估信息';
     } catch (error) {
         console.error('预估失败:', error);
-        estimationContent.innerHTML = '❌ 预估失败，请重试';
+        estimationContent.textContent = '❌ 预估失败，请重试';
     } finally {
         estimateBtn.disabled = false;
     }
@@ -879,13 +958,19 @@ async function traverseDirectory(entry, path = '') {
         }
     } else if (entry.isDirectory) {
         const reader = entry.createReader();
-        const entries = await new Promise((resolve, reject) => {
+        // Chrome 的 readEntries 每批最多返回 100 条，必须在同一个 reader 上循环调用，
+        // 直到返回空数组才算读完，否则文件数 > 100 的目录会被截断。
+        const readBatch = () => new Promise((resolve, reject) => {
             reader.readEntries(resolve, reject);
         });
 
-        for (const e of entries) {
-            const subFiles = await traverseDirectory(e, path + entry.name + '/');
-            files.push(...subFiles);
+        let batch = await readBatch();
+        while (batch.length > 0) {
+            for (const e of batch) {
+                const subFiles = await traverseDirectory(e, path + entry.name + '/');
+                files.push(...subFiles);
+            }
+            batch = await readBatch();
         }
     }
 

@@ -2,10 +2,12 @@
 
 from translate import create_zip, create_zip_with_structure
 from translation_runner import translate_single_file
-from llm_models import get_models
+from llm_models import get_models, get_model_info
 from cost_estimator import estimate_cost, format_cost_summary
 from flask import Flask, request, render_template, send_from_directory, flash, redirect, jsonify
 import logging
+import re
+import stat
 from werkzeug.utils import secure_filename
 import os
 import uuid
@@ -32,6 +34,52 @@ OUTPUT_FOLDER = "output"
 # ALLOWED_EXTENSIONS 单源真相在 config.py（上方 import），勿在此另立副本
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = config.MAX_FILE_SIZE  # D4: 上传上限 50MB，超限 → 413
+
+# ZIP 炸弹防护阈值（可被测试 monkeypatch 覆盖）
+_ZIP_MAX_TOTAL_UNCOMPRESSED = 200 * 1024 * 1024  # 解压后总大小上限 200MB
+_ZIP_MAX_ENTRIES = 2000                          # 条目数上限
+_ZIP_MAX_COMPRESSION_RATIO = 100                 # 单成员最大压缩比
+_ZIP_RATIO_CHECK_MIN_SIZE = 10 * 1024 * 1024     # 单成员 > 此值才做压缩比检查
+
+# /success 允许的 zip_path 白名单：只放行本机 /output/ 下的 .zip，挡掉 javascript: / 外链 / 路径穿越
+_SUCCESS_ZIP_PATH_RE = re.compile(r"^/output/[A-Za-z0-9_.\-]+\.zip$")
+
+# 合法的翻译引擎集合
+_VALID_ENGINES = ("google", "openrouter")
+
+
+class AllTranslationsFailed(Exception):
+    """全部语言/文件翻译失败 —— 映射到 HTTP 500（区别于坏输入的 400）。"""
+
+
+def _emit_progress(data, socket_sid=None):
+    """发送进度事件。
+
+    socket_sid 存在时定向发送给发起请求的客户端（前端把 socket.id 放进 FormData）；
+    缺失时退回原有全局广播行为（namespace 不变 /test）。
+    """
+    if socket_sid:
+        socketio.emit("progress", data, namespace="/test", to=socket_sid)
+    else:
+        socketio.emit("progress", data, namespace="/test")
+
+
+def _safe_remove(path):
+    """尽力删除单个文件，失败仅告警不抛错。"""
+    try:
+        if path and os.path.exists(path):
+            os.remove(path)
+    except Exception as e:
+        logger.warning(f"清理文件失败 {path}: {e}")
+
+
+def _safe_rmtree(path):
+    """尽力删除目录树，失败仅告警不抛错。"""
+    try:
+        if path and os.path.isdir(path):
+            shutil.rmtree(path)
+    except Exception as e:
+        logger.warning(f"清理目录失败 {path}: {e}")
 
 # Google Translate Client —— lazy init，凭证缺失时降级到 fallback 语言列表
 # 这样 OpenRouter 引擎路径不受 Google 凭证影响，独立可用
@@ -117,34 +165,71 @@ def is_zip_file(filename):
 
 def extract_zip_files(zip_path, extract_dir):
     """
-    解压 ZIP 文件，递归获取所有有效的 .json/.js 文件
+    安全解压 ZIP 文件，逐成员校验后再解压，递归获取所有有效的 .json/.js 文件。
+
+    防护措施（旧实现的路径穿越检查是死代码，extractall 照解，已彻底重写）：
+      - 跳过目录 / __MACOSX / ._ 资源文件
+      - 拒绝符号链接成员（防止解压后指向宿主机文件被打包外送）
+      - 路径穿越：realpath 后必须落在 extract_dir 内，否则跳过（绝不解压）
+      - ZIP 炸弹：解压前预检总大小/条目数；单成员按压缩比拒绝
+      - 只对通过全部校验的成员逐个 zf.extract()（不再 extractall）
+
     返回: [(相对路径, 绝对路径), ...]
     """
     valid_files = []
+    real_extract_dir = os.path.realpath(extract_dir)
 
     try:
         with zipfile.ZipFile(zip_path, 'r') as zf:
-            # 安全检查：防止路径穿越攻击
-            for name in zf.namelist():
-                if '..' in name or name.startswith('/'):
-                    logger.warning(f"跳过可疑路径: {name}")
+            infolist = zf.infolist()
+
+            # ZIP 炸弹防护：解压前预检条目数与解压后总大小
+            if len(infolist) > _ZIP_MAX_ENTRIES:
+                raise ValueError(
+                    f"ZIP 条目数过多（{len(infolist)} > {_ZIP_MAX_ENTRIES}），疑似 ZIP 炸弹，已拒绝"
+                )
+            total_uncompressed = sum(info.file_size for info in infolist)
+            if total_uncompressed > _ZIP_MAX_TOTAL_UNCOMPRESSED:
+                raise ValueError(
+                    f"ZIP 解压后总大小过大（{total_uncompressed} 字节 > "
+                    f"{_ZIP_MAX_TOTAL_UNCOMPRESSED} 字节），疑似 ZIP 炸弹，已拒绝"
+                )
+
+            for member in infolist:
+                name = member.filename
+
+                # 跳过目录条目
+                if name.endswith('/'):
+                    continue
+                # 跳过 macOS 资源文件
+                if name.startswith('__MACOSX') or os.path.basename(name).startswith('._'):
                     continue
 
-            # 解压所有文件
-            zf.extractall(extract_dir)
-
-            # 递归查找有效文件
-            for name in zf.namelist():
-                # 跳过 macOS 资源文件和目录
-                if name.startswith('__MACOSX') or name.startswith('._') or name.endswith('/'):
+                # 拒绝符号链接（external_attr 高 16 位是 unix st_mode）
+                mode = member.external_attr >> 16
+                if stat.S_ISLNK(mode):
+                    logger.warning(f"跳过符号链接条目: {name}")
                     continue
 
-                # 检查是否为有效的翻译文件
-                if name.endswith(('.json', '.js')):
-                    full_path = os.path.join(extract_dir, name)
-                    if os.path.exists(full_path) and os.path.isfile(full_path):
-                        valid_files.append((name, full_path))
-                        logger.info(f"发现有效文件: {name}")
+                # 单成员 ZIP 炸弹：压缩比过高且体积超阈值 → 拒绝该成员
+                ratio = member.file_size / max(member.compress_size, 1)
+                if ratio > _ZIP_MAX_COMPRESSION_RATIO and member.file_size > _ZIP_RATIO_CHECK_MIN_SIZE:
+                    logger.warning(f"跳过高压缩比成员（{ratio:.0f}x, {member.file_size} 字节）: {name}")
+                    continue
+
+                # 路径穿越：解析后必须落在 extract_dir 内
+                target = os.path.realpath(os.path.join(extract_dir, name))
+                if not target.startswith(real_extract_dir + os.sep):
+                    logger.warning(f"跳过越界路径条目（疑似路径穿越）: {name}")
+                    continue
+
+                # 通过全部校验，逐个解压
+                zf.extract(member, extract_dir)
+
+                # 只从通过校验的成员收集有效翻译文件，路径用校验后的 target
+                if name.endswith(('.json', '.js')) and os.path.isfile(target):
+                    valid_files.append((name, target))
+                    logger.info(f"发现有效文件: {name}")
 
         logger.info(f"ZIP 解压完成，共发现 {len(valid_files)} 个有效文件")
         return valid_files
@@ -152,9 +237,6 @@ def extract_zip_files(zip_path, extract_dir):
     except zipfile.BadZipFile:
         logger.error(f"无效的 ZIP 文件: {zip_path}")
         raise ValueError("上传的文件不是有效的 ZIP 压缩包")
-    except Exception as e:
-        logger.error(f"解压 ZIP 文件失败: {e}")
-        raise
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -170,8 +252,9 @@ def uploaded_file(filename):
 @app.route("/success")
 def success_page():
     zip_path = request.args.get("zip_path", "")
-    if not zip_path:
-        flash("未找到翻译结果文件")
+    # 只放行本机 /output/ 下的 .zip；挡掉 javascript: URI XSS、外链跳转、路径穿越
+    if not _SUCCESS_ZIP_PATH_RE.fullmatch(zip_path):
+        flash("未找到有效的翻译结果文件")
         return redirect("/")
     return render_template("success.html", zip_path=zip_path)
 
@@ -187,10 +270,11 @@ def get_llm_models_api():
         return jsonify({"success": False, "error": str(e), "models": []})
 
 
-def process_zip_archive(zip_path, target_languages, translation_engine, ai_model, output_dir, base_name, timestamp, unique_id):
+def process_zip_archive(zip_path, target_languages, translation_engine, ai_model, output_dir, base_name, timestamp, unique_id, socket_sid=None):
     """
     处理 ZIP 压缩包：解压、翻译所有文件、保持目录结构打包
-    返回: (zip_name, zip_path) 或 None
+    返回: (zip_name, zip_path, errors) —— errors 为部分失败任务的消息列表（全部成功时为空）
+    坏 ZIP / 空 ZIP / ZIP 炸弹 → ValueError；全部任务失败 → AllTranslationsFailed。
     """
     # 创建临时解压目录
     extract_dir = os.path.join(output_dir, "extracted")
@@ -209,6 +293,7 @@ def process_zip_archive(zip_path, target_languages, translation_engine, ai_model
 
         # 存储翻译结果：{语言: [(相对路径, 输出文件路径), ...]}
         translated_files = []
+        errors = []  # 部分失败任务的可读消息（"<相对路径> (<语言>): <原因>"）
         completed_tasks = 0
 
         for lang_index, target_language in enumerate(target_languages):
@@ -216,13 +301,12 @@ def process_zip_archive(zip_path, target_languages, translation_engine, ai_model
             lang_output_dir = os.path.join(output_dir, target_language)
             os.makedirs(lang_output_dir, exist_ok=True)
 
-            socketio.emit(
-                "progress",
+            _emit_progress(
                 {
                     "progress": (completed_tasks / total_tasks) * 100,
                     "message": f"开始翻译到 {target_language}...",
                 },
-                namespace="/test",
+                socket_sid,
             )
 
             for file_index, (relative_path, full_path) in enumerate(valid_files):
@@ -239,25 +323,23 @@ def process_zip_archive(zip_path, target_languages, translation_engine, ai_model
                     else:
                         file_output_dir = lang_output_dir
 
-                    # 进度回调
+                    # 进度回调（闭包捕获 task_start/task_end/target_language/relative_path/socket_sid）
                     def progress_callback(item_progress, message):
                         total_progress = task_start + (item_progress / 100) * (task_end - task_start)
-                        socketio.emit(
-                            "progress",
+                        _emit_progress(
                             {
                                 "progress": total_progress,
                                 "message": f"{target_language} - {os.path.basename(relative_path)}: {message}",
                             },
-                            namespace="/test",
+                            socket_sid,
                         )
 
-                    socketio.emit(
-                        "progress",
+                    _emit_progress(
                         {
                             "progress": task_start,
                             "message": f"翻译 {relative_path} 到 {target_language}...",
                         },
-                        namespace="/test",
+                        socket_sid,
                     )
 
                     # 翻译文件
@@ -279,19 +361,20 @@ def process_zip_archive(zip_path, target_languages, translation_engine, ai_model
                 except Exception as e:
                     error_msg = str(e)
                     logger.error(f"翻译失败 {relative_path} ({target_language}): {error_msg}")
-                    socketio.emit(
-                        "progress",
+                    errors.append(f"{relative_path} ({target_language}): {error_msg}")
+                    _emit_progress(
                         {
                             "progress": task_end,
                             "error": f"⚠️ {relative_path} ({target_language}) 翻译失败: {error_msg}",
                         },
-                        namespace="/test",
+                        socket_sid,
                     )
 
                 completed_tasks += 1
 
         if not translated_files:
-            raise ValueError("所有文件翻译都失败了")
+            # 全部任务失败 → 500（而非坏输入的 400）
+            raise AllTranslationsFailed("ZIP 内所有文件翻译都失败了，请检查错误信息并重试")
 
         # 创建输出 ZIP（保持目录结构）
         zip_name = f"translations_{base_name}_{timestamp}_{unique_id}.zip"
@@ -300,7 +383,7 @@ def process_zip_archive(zip_path, target_languages, translation_engine, ai_model
         create_zip_with_structure(translated_files, zip_path_output)
         logger.info(f"ZIP 文件创建完成: {zip_path_output}")
 
-        return zip_name, zip_path_output
+        return zip_name, zip_path_output, errors
 
     finally:
         # 清理解压目录
@@ -313,24 +396,45 @@ def process_zip_archive(zip_path, target_languages, translation_engine, ai_model
 
 @app.route("/translate", methods=["POST"])
 def translate_file_route():
+    """处理翻译请求。仅被前端 AJAX fetch 调用，一律返回 JSON（不再 flash+redirect）。
+
+    契约：
+      客户端错误（文件类型/未选语言/未知模型/无效引擎）→ 400 + {success:false, error}
+      服务端错误（翻译全部失败/未捕获异常）           → 500 + {success:false, error}
+      成功                                             → 200 + {success:true, zip_path, redirect_url}
+                                                        部分语言失败额外带 errors 数组（仍算成功）
+    """
+    # 前端把 socket.id 放进 FormData（可能缺失/undefined）；用于把进度事件定向发给本客户端
+    socket_sid = request.form.get("socket_sid") or None
+    saved_file_path = None
+    output_dir = None
     try:
-        # Check if the file part is in the request
+        # ---------- 客户端输入校验（全部先做，通过后才落盘）----------
         if "file" not in request.files:
-            flash("No file part")
-            return redirect("/")
+            return jsonify({"success": False, "error": "未上传文件"}), 400
 
         file = request.files["file"]
-
-        # If the user does not select a file, the browser submits an empty file without a filename
         if file.filename == "":
-            flash("No selected file")
-            return redirect("/")
+            return jsonify({"success": False, "error": "未选择文件"}), 400
 
         if not allowed_file(file.filename):
-            flash("Invalid file type")
-            return redirect("/")
+            return jsonify({"success": False, "error": "不支持的文件类型，仅支持 .json / .js / .zip"}), 400
 
-        # 生成唯一的文件名，避免同名文件覆盖
+        target_languages = request.form.getlist("languages")
+        if not target_languages:
+            return jsonify({"success": False, "error": "未选择目标语言"}), 400
+
+        # 翻译引擎必须 ∈ {google, openrouter}
+        translation_engine = request.form.get("translation_engine") or TRANSLATION_ENGINE
+        if translation_engine not in _VALID_ENGINES:
+            return jsonify({"success": False, "error": f"无效的翻译引擎: {translation_engine}"}), 400
+
+        # ai_model 空串落回默认；openrouter 引擎校验 slug 合法性
+        ai_model = request.form.get("ai_model") or config.DEFAULT_MODEL
+        if translation_engine == "openrouter" and get_model_info(ai_model) is None:
+            return jsonify({"success": False, "error": f"未知的 AI 模型: {ai_model}"}), 400
+
+        # ---------- 落盘 ----------
         original_filename = secure_filename(file.filename)
         timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         unique_id = uuid.uuid4().hex[:8]
@@ -338,98 +442,82 @@ def translate_file_route():
         file_extension = os.path.splitext(original_filename)[1].lower()
         unique_filename = f"{base_name}_{timestamp}_{unique_id}{file_extension}"
 
-        # 保存上传文件
         saved_file_path = os.path.join(app.config["UPLOAD_FOLDER"], unique_filename)
         file.save(saved_file_path)
-        print(f"File saved to: {saved_file_path}")
+        logger.info(f"File saved to: {saved_file_path}")
 
-        # 创建独立的输出目录
         output_dir = os.path.join(OUTPUT_FOLDER, f"{base_name}_{timestamp}_{unique_id}")
         os.makedirs(output_dir, exist_ok=True)
-        print(f"Output directory created: {output_dir}")
-
-        # Get target languages
-        target_languages = request.form.getlist("languages")
-
-        if not target_languages:
-            flash("No target languages selected")
-            return redirect("/")
-
-        # Get translation engine from form or use default
-        translation_engine = request.form.get("translation_engine", TRANSLATION_ENGINE)
-
-        # Get AI model if using OpenRouter
-        ai_model = request.form.get("ai_model", config.DEFAULT_MODEL)
 
         # ========== ZIP 文件处理 ==========
         if is_zip_file(original_filename):
             try:
-                zip_name, zip_path = process_zip_archive(
+                zip_name, _zip_path, errors = process_zip_archive(
                     saved_file_path, target_languages, translation_engine,
-                    ai_model, output_dir, base_name, timestamp, unique_id
+                    ai_model, output_dir, base_name, timestamp, unique_id, socket_sid
                 )
+            except AllTranslationsFailed as e:
+                # 全部任务失败 → 服务端错误 500
+                _safe_remove(saved_file_path)
+                _safe_rmtree(output_dir)
+                return jsonify({"success": False, "error": str(e)}), 500
+            except ValueError as e:
+                # 坏 ZIP / 空 ZIP / ZIP 炸弹 → 客户端输入错误 400
+                _safe_remove(saved_file_path)
+                _safe_rmtree(output_dir)
+                return jsonify({"success": False, "error": f"ZIP 处理失败: {e}"}), 400
 
-                # 清理
-                if os.path.exists(saved_file_path):
-                    os.remove(saved_file_path)
-                if os.path.exists(output_dir):
-                    shutil.rmtree(output_dir)
+            # 清理临时文件
+            _safe_remove(saved_file_path)
+            _safe_rmtree(output_dir)
 
-                # 发送完成信号
-                socketio.emit(
-                    "progress",
-                    {
-                        "progress": 100,
-                        "message": "ZIP 压缩包翻译全部完成！",
-                        "complete": True,
-                        "redirect_url": f"/success?zip_path=/output/{zip_name}",
-                    },
-                    namespace="/test",
-                )
+            redirect_url = f"/success?zip_path=/output/{zip_name}"
+            _emit_progress(
+                {
+                    "progress": 100,
+                    "message": "ZIP 压缩包翻译全部完成！",
+                    "complete": True,
+                    "redirect_url": redirect_url,
+                },
+                socket_sid,
+            )
+            sleep(0.5)
 
-                sleep(0.5)
-                return "", 200
+            resp = {"success": True, "zip_path": f"/output/{zip_name}", "redirect_url": redirect_url}
+            if errors:
+                resp["errors"] = errors
+            return jsonify(resp), 200
 
-            except Exception as e:
-                logger.error(f"ZIP 处理失败: {e}")
-                flash(f"ZIP 处理失败: {e}")
-                return redirect("/")
-
-        # ========== 单文件处理（原有逻辑） ==========
+        # ========== 单文件处理 ==========
         output_files = []
+        errors = []  # 部分失败语言的可读消息（"<语言>: <原因>"）
         total_languages = len(target_languages)
 
         for index, target_language in enumerate(target_languages):
             try:
-                print(f"Starting translation for {target_language}...")
-
                 # 计算当前语言的进度范围
                 language_start_progress = (index / total_languages) * 100
                 language_end_progress = ((index + 1) / total_languages) * 100
 
-                # 发送开始翻译的进度
-                socketio.emit(
-                    "progress",
+                _emit_progress(
                     {
                         "progress": language_start_progress,
                         "message": f"开始翻译到 {target_language}...",
                     },
-                    namespace="/test",
+                    socket_sid,
                 )
 
-                # 定义进度回调函数
+                # 进度回调（闭包捕获 language_start/end_progress、target_language、socket_sid）
                 def progress_callback(item_progress, message):
-                    # 计算总体进度：当前语言的起始进度 + 当前语言内的进度
                     total_progress = language_start_progress + (item_progress / 100) * (
                         language_end_progress - language_start_progress
                     )
-                    socketio.emit(
-                        "progress",
+                    _emit_progress(
                         {
                             "progress": total_progress,
                             "message": f"{target_language}: {message}",
                         },
-                        namespace="/test",
+                        socket_sid,
                     )
 
                 output_file_name, output_file_path = translate_single_file(
@@ -437,109 +525,81 @@ def translate_file_route():
                     ai_model, output_dir, progress_callback
                 )
                 output_files.append(output_file_path)
-                print(
-                    f"Translation to {target_language} completed. Output file: {output_file_name}"
-                )
+                logger.info(f"Translation to {target_language} completed: {output_file_name}")
 
-                # 发送完成进度
-                socketio.emit(
-                    "progress",
+                _emit_progress(
                     {
                         "progress": language_end_progress,
                         "message": f"{target_language} 翻译完成！",
                     },
-                    namespace="/test",
+                    socket_sid,
                 )
 
             except Exception as e:
                 error_msg = str(e)
-                print(f"Translation failed for {target_language}: {error_msg}")
                 logger.error(f"Translation failed for {target_language}: {error_msg}")
+                errors.append(f"{target_language}: {error_msg}")
 
-                # 发送错误信息
-                socketio.emit(
-                    "progress",
+                _emit_progress(
                     {
                         "progress": (index + 1) / total_languages * 100,
                         "error": f"⚠️ {target_language} 翻译失败: {error_msg}，继续处理其他语言...",
                     },
-                    namespace="/test",
+                    socket_sid,
                 )
 
                 # 记录错误但继续处理其他语言（不要中断整个流程）
-                # 如果是速率限制或配额错误，记录警告但继续
                 if "速率限制" in error_msg or "Rate Limit" in error_msg:
                     logger.warning(f"{target_language}: API速率限制，跳过此语言继续处理")
                 elif "配额" in error_msg or "quota" in error_msg:
                     logger.warning(f"{target_language}: API配额问题，跳过此语言继续处理")
-
-                # 继续处理下一个语言，而不是中断整个流程
                 continue
 
-        # Create a ZIP archive from translated files (only if we have successful translations)
+        # 全部语言翻译都失败 → 服务端错误 500（不得让前端误判成功）
         if not output_files:
-            # 所有语言翻译都失败了
-            flash("所有语言翻译都失败了，请检查错误信息并重试")
-            return redirect("/")
+            _safe_remove(saved_file_path)
+            _safe_rmtree(output_dir)
+            return jsonify({"success": False, "error": "所有语言翻译都失败了，请检查错误信息并重试"}), 500
 
         zip_name = f"translations_{base_name}_{timestamp}_{unique_id}.zip"
         zip_path_temp = os.path.join(output_dir, zip_name)
         create_zip(output_files, zip_path_temp)
-        print(f"ZIP file created at: {zip_path_temp}")
 
-        # 如果有部分语言失败，通知用户
         successful_count = len(output_files)
         if successful_count < total_languages:
-            failed_count = total_languages - successful_count
-            logger.info(f"翻译完成：{successful_count} 个成功，{failed_count} 个失败")
+            logger.info(f"翻译完成：{successful_count} 个成功，{total_languages - successful_count} 个失败")
 
         # Move ZIP to main output folder
         zip_path = os.path.join(OUTPUT_FOLDER, zip_name)
         shutil.move(zip_path_temp, zip_path)
-        print(f"ZIP moved to: {zip_path}")
 
-        # Remove individual files after adding to ZIP
-        for output_file in output_files:
-            if os.path.exists(output_file):
-                os.remove(output_file)
+        # 清理临时文件
+        _safe_rmtree(output_dir)
+        _safe_remove(saved_file_path)
 
-        # Remove temporary output directory
-        if os.path.exists(output_dir) and os.path.isdir(output_dir):
-            try:
-                shutil.rmtree(output_dir)
-                print(f"Cleaned up temporary directory: {output_dir}")
-            except Exception as e:
-                print(f"Warning: Could not remove temporary directory: {e}")
-
-        # Remove uploaded temporary file
-        if os.path.exists(saved_file_path):
-            try:
-                os.remove(saved_file_path)
-                print(f"Cleaned up uploaded file: {saved_file_path}")
-            except Exception as e:
-                print(f"Warning: Could not remove uploaded file: {e}")
-
-        # 发送完成信号
-        socketio.emit(
-            "progress",
+        redirect_url = f"/success?zip_path=/output/{zip_name}"
+        _emit_progress(
             {
                 "progress": 100,
                 "message": "翻译全部完成！",
                 "complete": True,
-                "redirect_url": f"/success?zip_path=/output/{zip_name}",
+                "redirect_url": redirect_url,
             },
-            namespace="/test",
+            socket_sid,
         )
-
-        # 给客户端一点时间处理完成信号
         sleep(0.5)
 
-        return "", 200  # 返回空响应，让客户端处理跳转
+        resp = {"success": True, "zip_path": f"/output/{zip_name}", "redirect_url": redirect_url}
+        if errors:
+            resp["errors"] = errors
+        return jsonify(resp), 200
 
     except Exception as e:
-        print(f"An error occurred during file translation: {e}")
-        flash(f"An error occurred during file translation: {e}")
-        return redirect("/")
+        # 未捕获异常 → 服务端错误 500
+        logger.error(f"翻译过程发生未捕获异常: {e}")
+        _safe_remove(saved_file_path)
+        _safe_rmtree(output_dir)
+        return jsonify({"success": False, "error": f"翻译过程发生错误: {e}"}), 500
 
 
 @app.route("/api/estimate-cost", methods=["POST"])
@@ -568,12 +628,17 @@ def estimate_cost_route():
                 "estimated_cost": "请查看 Google Cloud Console"
             })
 
-        # 保存临时文件并估算
+        # 保存临时文件并估算 —— try/finally 保证 estimate_cost 抛异常时也清理临时文件（F: 修泄漏）
         import tempfile
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp_file:
-            file.save(tmp_file.name)
-            token_info = estimate_cost(tmp_file.name, target_languages, ai_model)
-            os.unlink(tmp_file.name)
+        tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
+        tmp_path = tmp_file.name
+        tmp_file.close()
+        try:
+            file.save(tmp_path)
+            token_info = estimate_cost(tmp_path, target_languages, ai_model)
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
 
         if "error" in token_info:
             return jsonify({"success": False, "error": token_info["error"]}), 500

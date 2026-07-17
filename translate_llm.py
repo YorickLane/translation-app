@@ -26,6 +26,7 @@ try:
         LANGUAGE_CODE_MAPPING,
         BATCH_CONFIG,
         VALIDATION_STRENGTH,
+        TERM_GLOSSARY,
     )
     from translation_postprocess import post_process_translation
     USE_ADVANCED_CONFIG = True
@@ -274,13 +275,95 @@ def qa_retranslate(translated_data, source_data, target_language, model,
     return translated_data, remaining
 
 
+# ---------- 嵌套结构展平 / 重建（纯函数） ----------
+
+def _flatten(data, _path=()):
+    """递归展平 dict/list，收集【非空字符串】叶子为 [(path_tuple, str)]。
+
+    - dict: 按插入序遍历，path 追加 str key
+    - list: 按下标遍历，path 追加 int index
+    - str 叶子且 strip 后非空 → 收集待翻译；空串/纯空白不送翻译（与 Google 引擎一致）
+    - int/float/bool/None 及其它标量 → 不收集（重建时原样保留）
+    顶层同时支持 dict 与 list。
+
+    只返回待翻译叶子；重建靠 _rebuild 走原始 data，故此处无需记录非字符串叶子。
+    """
+    leaves = []
+    if isinstance(data, dict):
+        for key, value in data.items():
+            leaves.extend(_flatten(value, _path + (key,)))
+    elif isinstance(data, list):
+        for idx, value in enumerate(data):
+            leaves.extend(_flatten(value, _path + (idx,)))
+    elif isinstance(data, str):
+        if data.strip():
+            leaves.append((_path, data))
+    # 其它标量（int/float/bool/None）不收集，重建时由 _rebuild 原样返回
+    return leaves
+
+
+def _rebuild(data, translations_by_path, _path=()):
+    """按原结构重建：翻译过的路径取译文，其余（非字符串/空串/未翻译）原样保留。
+
+    完整保留 dict 键序与 list 顺序（dict 推导式保序，Py3.7+）。
+    translations_by_path: {path_tuple: translated_str}。
+    """
+    if isinstance(data, dict):
+        return {
+            key: _rebuild(value, translations_by_path, _path + (key,))
+            for key, value in data.items()
+        }
+    if isinstance(data, list):
+        return [
+            _rebuild(value, translations_by_path, _path + (idx,))
+            for idx, value in enumerate(data)
+        ]
+    if isinstance(data, str):
+        return translations_by_path.get(_path, data)
+    return data  # int/float/bool/None 等原样
+
+
+def _path_to_str(path):
+    """路径元组 → 可读字符串；dict key 用点号连接，list 下标用 [i]。
+
+    ('a','b') → 'a.b'；('items',0,'label') → 'items[0].label'；(0,) → '[0]'
+    """
+    out = ""
+    for seg in path:
+        if isinstance(seg, int):
+            out += f"[{seg}]"
+        else:
+            out += seg if out == "" else f".{seg}"
+    return out
+
+
+def _apply_glossary(translations_by_path, target_language):
+    """术语表兜底：【整 key 精确匹配】，用路径最后一段（叶子 key）匹配 TERM_GLOSSARY。
+
+    语义等同 translation_postprocess.ensure_term_consistency（whole-key exact match），
+    但这里 translations_by_path 的 key 是路径元组，post_process 内的 glossary 对元组 key
+    不会命中，故在此显式补上：只有叶子 key 精确等于 glossary 的 key 才强制（真实语言包
+    key 多为整句，几乎不触发；这只是确定性兜底）。就地修改 translations_by_path。
+    """
+    if not (USE_ADVANCED_CONFIG and target_language in TERM_GLOSSARY):
+        return
+    glossary = TERM_GLOSSARY[target_language]
+    for path, value in list(translations_by_path.items()):
+        leaf = path[-1] if path else None
+        if isinstance(leaf, str) and leaf in glossary and isinstance(value, str):
+            expected = glossary[leaf]
+            if value.lower() != expected.lower():
+                logger.info(f"术语修正 ({_path_to_str(path)}): {value} → {expected}")
+                translations_by_path[path] = expected
+
+
 # ---------- JSON 文件翻译 ----------
 
 def translate_json_file_llm(
     source_file_path, target_language,
     progress_callback=None, model=None, output_dir="output",
 ):
-    """翻译 JSON 语言包文件。"""
+    """翻译 JSON 语言包文件（支持任意嵌套 dict/list，顶层可为 dict 或 list）。"""
     selected_model = model or DEFAULT_MODEL
     logger.info(f"翻译 JSON → {target_language} 使用 {selected_model}")
 
@@ -289,13 +372,16 @@ def translate_json_file_llm(
     with open(source_file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    items = list(data.items())
-    total_items = len(items)
+    # 递归展平：只取非空字符串叶子送翻译；嵌套结构 / 非字符串叶子在重建时原样保留。
+    # 内部一律以 path 元组为 key（唯一，避免不同路径同叶子 key 撞车）。
+    leaves = _flatten(data)
+    source_by_path = dict(leaves)          # path → 原文，供 QA 回灌取原文
+    total_items = len(leaves)
     use_dynamic = USE_ADVANCED_CONFIG and BATCH_CONFIG.get('dynamic_batching', False)
-    batches = _create_dynamic_batches(items, use_dynamic)
+    batches = _create_dynamic_batches(leaves, use_dynamic)
     total_batches = len(batches)
 
-    translated_data = {}
+    translations_by_path = {}
     failed_batches = []
     processed = 0
     max_retries = BATCH_CONFIG.get('max_retries', MAX_RETRIES) if USE_ADVANCED_CONFIG else MAX_RETRIES
@@ -318,13 +404,13 @@ def translate_json_file_llm(
                     logger.warning(f"批次 {batch_num} 英文混入过多，重试 {attempt}/{max_retries}")
                     if attempt > max_retries:
                         # 保留最后一次结果（部分翻译总比无翻译好）
-                        translated_data.update(translated)
+                        translations_by_path.update(translated)
                         processed += batch_size
                         break
                     time.sleep(_get_retry_delay(attempt))
                     continue
 
-                translated_data.update(translated)
+                translations_by_path.update(translated)
                 processed += batch_size
                 success = True
 
@@ -335,7 +421,7 @@ def translate_json_file_llm(
                     failed_batches.append({
                         'batch_num': batch_num, 'error': str(e), 'item_count': batch_size,
                     })
-                    translated_data.update(batch_items)  # 保留原文
+                    translations_by_path.update(batch_items)  # 保留原文（path → 原文）
                     processed += batch_size
                     if progress_callback:
                         progress_callback((processed / total_items) * 100,
@@ -348,15 +434,23 @@ def translate_json_file_llm(
             delay = BATCH_CONFIG.get('request_delay', REQUEST_DELAY) if USE_ADVANCED_CONFIG else REQUEST_DELAY
             time.sleep(delay)
 
+    # 术语表兜底（整 key 精确匹配，用叶子 key）——post_process 对 path 元组 key 不命中，
+    # 这里显式补；放在 QA 之前，保持原"glossary 先于 QA"的顺序。
+    _apply_glossary(translations_by_path, target_language)
+
     # D.7 QA 回灌重译闭环（仅 strict 语言；可经 BATCH_CONFIG['qa_retranslate'] 关闭）
+    # translated / source 均以 path 为 key，qa_retranslate 逻辑无需改动。
     needs_review = []
     if (USE_ADVANCED_CONFIG and BATCH_CONFIG.get('qa_retranslate', True)
             and VALIDATION_STRENGTH.get(target_language) == 'strict'):
         max_rounds = BATCH_CONFIG.get('qa_max_rounds', 1)
-        translated_data, needs_review = qa_retranslate(
-            translated_data, data, target_language, selected_model,
+        translations_by_path, needs_review = qa_retranslate(
+            translations_by_path, source_by_path, target_language, selected_model,
             max_rounds=max_rounds, progress_callback=progress_callback,
         )
+
+    # 按原结构重建（保留键序、嵌套 dict/list、非字符串叶子、空串、未翻译原文）
+    translated_data = _rebuild(data, translations_by_path)
 
     # 保存
     output_file = f"{source_base}_{target_language}.json"
@@ -366,13 +460,14 @@ def translate_json_file_llm(
         json.dump(translated_data, f, ensure_ascii=False, indent=2)
 
     # D.7 人工复审队列：QA 回灌后仍未过的写 sidecar（非阻塞，交付物不受影响）
+    # key 用点号路径字符串（数组下标 [i]），便于人工定位嵌套位置。
     if needs_review:
         review_path = os.path.join(
             output_dir, f"{source_base}_{target_language}.needs_review.json"
         )
         with open(review_path, "w", encoding="utf-8") as f:
             json.dump(
-                [{"key": k, "value": v, "reason": r} for k, v, r in needs_review],
+                [{"key": _path_to_str(p), "value": v, "reason": r} for p, v, r in needs_review],
                 f, ensure_ascii=False, indent=2,
             )
         logger.warning(f"[{target_language}] {len(needs_review)} 项 QA 未过，写入 {review_path}")
