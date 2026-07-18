@@ -80,6 +80,18 @@ def _safe_rmtree(path):
     except Exception as e:
         logger.warning(f"清理目录失败 {path}: {e}")
 
+
+def _needs_review_sidecar(output_file_path):
+    """若翻译产出了 QA 待复审 sidecar（LLM/JSON 引擎在主输出旁写的
+    `<base>_<lang>.needs_review.json`），返回其路径，否则 None。
+
+    命名由 translate_llm.translate_json_file_llm 决定：主输出 `foo_zh-TW.json`
+    对应 sidecar `foo_zh-TW.needs_review.json`。Google/JS 引擎不写 sidecar，
+    此时文件不存在，返回 None（无副作用）。以"文件是否存在"判定，与引擎无关。
+    """
+    sidecar = os.path.splitext(output_file_path)[0] + ".needs_review.json"
+    return sidecar if os.path.isfile(sidecar) else None
+
 # Google Translate Client —— lazy init 复用 translate._get_translate_client（单源真相）
 # 凭证缺失时 get_supported_languages 降级到 fallback 语言列表，
 # 这样 OpenRouter 引擎路径不受 Google 凭证影响，独立可用
@@ -336,6 +348,15 @@ def process_zip_archive(zip_path, target_languages, translation_engine, ai_model
 
                     translated_files.append((output_relative_path, output_file_path))
 
+                    # QA 复审 sidecar 与主文件同目录、同名换后缀，纳入 ZIP 保持目录结构
+                    sidecar = _needs_review_sidecar(output_file_path)
+                    if sidecar:
+                        sidecar_rel = os.path.join(
+                            os.path.dirname(output_relative_path), os.path.basename(sidecar)
+                        )
+                        translated_files.append((sidecar_rel, sidecar))
+                        logger.info(f"复审 sidecar 纳入交付: {sidecar_rel}")
+
                     logger.info(f"翻译完成: {relative_path} -> {output_relative_path}")
 
                 except Exception as e:
@@ -505,6 +526,11 @@ def translate_file_route():
                     ai_model, output_dir, progress_callback
                 )
                 output_files.append(output_file_path)
+                # QA 未过项的复审 sidecar 一并纳入交付 ZIP（否则随 output_dir 被清掉，用户看不到）
+                sidecar = _needs_review_sidecar(output_file_path)
+                if sidecar:
+                    output_files.append(sidecar)
+                    logger.info(f"[{target_language}] 复审 sidecar 纳入交付: {os.path.basename(sidecar)}")
                 logger.info(f"Translation to {target_language} completed: {output_file_name}")
 
                 _emit_progress(

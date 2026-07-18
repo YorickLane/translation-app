@@ -176,3 +176,50 @@ def test_llm_models_shape(client):
         assert "id" in m and "name" in m and "description" in m and "default" in m
     # 恰有一个（至少一个）默认模型
     assert any(m["default"] for m in models)
+
+
+# ---------------- QA 复审 sidecar 纳入交付 ZIP ----------------
+
+def test_needs_review_sidecar_helper(tmp_path):
+    """_needs_review_sidecar：存在同名 .needs_review.json 时返回其路径，否则 None。"""
+    out = tmp_path / "strings_zh-TW.json"
+    out.write_text("{}", encoding="utf-8")
+    # 无 sidecar → None
+    assert app_module._needs_review_sidecar(str(out)) is None
+    # 有 sidecar → 返回路径
+    sidecar = tmp_path / "strings_zh-TW.needs_review.json"
+    sidecar.write_text("[]", encoding="utf-8")
+    assert app_module._needs_review_sidecar(str(out)) == str(sidecar)
+
+
+def test_translate_includes_needs_review_sidecar(client, monkeypatch):
+    """单文件翻译产出的复审 sidecar 必须进入交付文件列表（不再随 output_dir 被清掉）。"""
+    captured = {}
+
+    def fake_translate_single_file(file_path, target_language, engine, ai_model, output_dir, cb=None):
+        out_name = f"strings_{target_language}.json"
+        out_path = os.path.join(output_dir, out_name)
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write("{}")
+        # 模拟 LLM/JSON 引擎写 QA 未过 sidecar（同目录、同名换后缀）
+        sidecar = os.path.join(output_dir, f"strings_{target_language}.needs_review.json")
+        with open(sidecar, "w", encoding="utf-8") as f:
+            f.write('[{"key":"x","value":"y","reason":"english"}]')
+        return out_name, out_path
+
+    monkeypatch.setattr(app_module, "translate_single_file", fake_translate_single_file)
+    # 捕获传给 create_zip 的文件清单（这是"交付"的真相），并产出占位 zip
+    monkeypatch.setattr(
+        app_module, "create_zip",
+        lambda files, out: (captured.__setitem__("files", list(files)), open(out, "w").close())
+    )
+
+    resp = _post_translate(
+        client, languages="zh-TW", translation_engine="openrouter", ai_model=config.DEFAULT_MODEL
+    )
+    assert resp.status_code == 200
+    assert resp.get_json()["success"] is True
+    zipped = captured.get("files", [])
+    assert any(f.endswith("strings_zh-TW.json") for f in zipped), "主翻译文件应在交付列表"
+    assert any(f.endswith("strings_zh-TW.needs_review.json") for f in zipped), \
+        "复审 sidecar 必须纳入交付 ZIP"
