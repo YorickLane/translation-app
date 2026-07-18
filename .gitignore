@@ -16,10 +16,13 @@ venv/
 env/
 ENV/
 
-# Google Cloud Credentials (推荐: google-credentials.json; legacy: serviceKey.json)
-google-credentials.json
-serviceKey.json
+# Google Cloud Credentials —— 用裸 *.json 作凭证安全网:
+# GCP 控制台下载的 service-account 密钥默认随机命名(如 my-project-abc123.json /
+# firebase-adminsdk-xxx.json),无关键词可匹配,只有 *.json 兜底才挡得住。本仓当前
+# 无需追踪任何 JSON fixture(git ls-files 为空),故安全性优先;确需追踪某个 JSON
+# 时用 `git add -f <file>` 显式豁免。下列具名行仅作自文档。
 *.json
+# 具名凭证(被上面的 *.json 覆盖,保留作说明): google-credentials.json / serviceKey.json
 .vscode/google-credentials.json
 .vscode/serviceKey.json
 

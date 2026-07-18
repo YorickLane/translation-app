@@ -50,61 +50,74 @@ REQUEST_DELAY = 0.1  # 请求间隔（秒）
 
 
 def safe_translate_text(text, target_language="en", retries=0):
-    """安全的翻译函数，包含重试机制和错误处理"""
+    """安全的翻译函数，包含重试机制和错误处理
+
+    重试用有界循环实现（最多重试到 MAX_RETRIES），避免原自递归导致的深调用栈。
+    保留原有渐进延迟语义：速率限制用 3**attempt 指数退避，服务不可用用
+    (attempt+1)*RETRY_DELAY 线性退避，通用错误用固定 RETRY_DELAY。各分支的日志与
+    最终失败行为（抛出对应异常）均与原递归实现逐一对齐。
+    """
     if not text or not text.strip():
         return text
 
-    try:
-        # 添加请求间隔，避免速率限制
-        time.sleep(REQUEST_DELAY)
+    # attempt 从入参 retries 起算（默认 0），循环内递增到 MAX_RETRIES 为止；
+    # 尝试次数、延迟序列、日志计数均与原 `retries < MAX_RETRIES` 递归完全一致。
+    attempt = retries
+    while True:
+        try:
+            # 添加请求间隔，避免速率限制
+            time.sleep(REQUEST_DELAY)
 
-        result = _get_translate_client().translate(text, target_language=target_language)
-        # 解码 HTML 实体，修复如 &#39; 等编码问题
-        return html.unescape(result["translatedText"])
+            result = _get_translate_client().translate(text, target_language=target_language)
+            # 解码 HTML 实体，修复如 &#39; 等编码问题
+            return html.unescape(result["translatedText"])
 
-    except TooManyRequests as e:
-        logger.warning(f"Rate limit exceeded, attempt {retries + 1}/{MAX_RETRIES}")
-        if retries < MAX_RETRIES:
-            # 更长的指数退避策略
-            delay = RETRY_DELAY * (3**retries)  # 使用3的指数而不是2
-            logger.info(f"Rate limit hit, waiting {delay} seconds before retry...")
-            time.sleep(delay)
-            return safe_translate_text(text, target_language, retries + 1)
-        else:
-            logger.error("Max retries exceeded for rate limit")
-            raise Exception(f"翻译失败：API速率限制。请检查Google Cloud计费账号状态")
+        except TooManyRequests as e:
+            logger.warning(f"Rate limit exceeded, attempt {attempt + 1}/{MAX_RETRIES}")
+            if attempt < MAX_RETRIES:
+                # 更长的指数退避策略
+                delay = RETRY_DELAY * (3**attempt)  # 使用3的指数而不是2
+                logger.info(f"Rate limit hit, waiting {delay} seconds before retry...")
+                time.sleep(delay)
+                attempt += 1
+                continue
+            else:
+                logger.error("Max retries exceeded for rate limit")
+                raise Exception(f"翻译失败：API速率限制。请检查Google Cloud计费账号状态")
 
-    except ServiceUnavailable as e:
-        logger.warning(f"Service unavailable, attempt {retries + 1}/{MAX_RETRIES}")
-        if retries < MAX_RETRIES:
-            delay = RETRY_DELAY * (retries + 1)
-            logger.info(f"Waiting {delay} seconds before retry...")
-            time.sleep(delay)
-            return safe_translate_text(text, target_language, retries + 1)
-        else:
-            logger.error("Max retries exceeded for service unavailable")
-            raise Exception(f"翻译失败：服务暂时不可用，请稍后重试")
+        except ServiceUnavailable as e:
+            logger.warning(f"Service unavailable, attempt {attempt + 1}/{MAX_RETRIES}")
+            if attempt < MAX_RETRIES:
+                delay = RETRY_DELAY * (attempt + 1)
+                logger.info(f"Waiting {delay} seconds before retry...")
+                time.sleep(delay)
+                attempt += 1
+                continue
+            else:
+                logger.error("Max retries exceeded for service unavailable")
+                raise Exception(f"翻译失败：服务暂时不可用，请稍后重试")
 
-    except RefreshError as e:
-        logger.error(f"Token refresh error: {e}")
-        raise Exception(f"翻译失败：认证错误，请检查Google Cloud凭证")
+        except RefreshError as e:
+            logger.error(f"Token refresh error: {e}")
+            raise Exception(f"翻译失败：认证错误，请检查Google Cloud凭证")
 
-    except GoogleAPIError as e:
-        logger.error(f"Google API error: {e}")
-        if "quota" in str(e).lower() or "billing" in str(e).lower():
-            raise Exception(f"翻译失败：请检查Google Cloud计费账号和配额设置")
-        else:
-            raise Exception(f"翻译失败：{str(e)}")
+        except GoogleAPIError as e:
+            logger.error(f"Google API error: {e}")
+            if "quota" in str(e).lower() or "billing" in str(e).lower():
+                raise Exception(f"翻译失败：请检查Google Cloud计费账号和配额设置")
+            else:
+                raise Exception(f"翻译失败：{str(e)}")
 
-    except Exception as e:
-        logger.error(f"Unexpected error during translation: {e}")
-        if retries < MAX_RETRIES:
-            delay = RETRY_DELAY
-            logger.info(f"Waiting {delay} seconds before retry...")
-            time.sleep(delay)
-            return safe_translate_text(text, target_language, retries + 1)
-        else:
-            raise Exception(f"翻译失败：{str(e)}")
+        except Exception as e:
+            logger.error(f"Unexpected error during translation: {e}")
+            if attempt < MAX_RETRIES:
+                delay = RETRY_DELAY
+                logger.info(f"Waiting {delay} seconds before retry...")
+                time.sleep(delay)
+                attempt += 1
+                continue
+            else:
+                raise Exception(f"翻译失败：{str(e)}")
 
 
 def translate_text(text, target_language="en"):

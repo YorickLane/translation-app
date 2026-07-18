@@ -19,6 +19,7 @@ USD_TO_CNY = 7.3
 
 # 中文源文本 → 目标语的长度相对系数（tokens 数量变化）
 OUTPUT_LENGTH_MULTIPLIER = {
+    'zh': 0.4,  # 中文最紧凑，一个 'zh' 键覆盖 zh/zh-TW/zh-CN（查表用 lang[:2]）
     'en': 0.5,  'ja': 0.7,  'ko': 0.8,
     'es': 0.9,  'fr': 0.9,  'de': 1.0,
     'ru': 0.9,  'ar': 0.8,  'pt': 0.9,

@@ -17,7 +17,10 @@ import re
 
 from llm_client import translate_batch
 from config import BATCH_SIZE, REQUEST_DELAY, MAX_RETRIES, DEFAULT_MODEL
-from translation_config import QUALITY_CHECK_RULES
+# 英文关键词模式单一来源:直接复用 translation_postprocess 编译的那份,不再本地重编
+# (SoT: translation_config.QUALITY_CHECK_RULES['english_keywords'];
+#  translation_postprocess 只依赖 translation_config,方向无环)
+from translation_postprocess import _ENGLISH_KEYWORD_PATTERNS
 from js_locale import parse_js_locale, dump_js_locale
 
 try:
@@ -122,14 +125,9 @@ GENERIC_RULE = (
 # ---------- English 混入检测（非英语目标触发重试） ----------
 
 _ENGLISH_PATTERN = re.compile(r'[A-Za-z]{3,}')
-# 词边界匹配，避免把罗曼语系同源词（cancelar/confirmar/editar/copiar 等）误判为英文混入
-# SoT: translation_config.QUALITY_CHECK_RULES['english_keywords']
-# (同一份 list 也被 translation_postprocess.contains_english_keywords 用;
-# 以前这里有本地 _ENGLISH_KEYWORDS 副本 2026-04-23 合并, work_philosophy §7)
-_ENGLISH_KEYWORD_PATTERNS = [
-    re.compile(rf'\b{re.escape(w)}\b', re.IGNORECASE)
-    for w in QUALITY_CHECK_RULES['english_keywords']
-]
+# 词边界匹配的 _ENGLISH_KEYWORD_PATTERNS 已在顶部从 translation_postprocess 复用导入
+# (避免罗曼语系同源词 cancelar/confirmar/editar/copiar 等被误判为英文混入)。
+# 以前这里有本地重复编译,2026-07-18 收敛到 translation_postprocess 单一来源。
 
 
 def _contains_too_much_english(translations):

@@ -8,9 +8,16 @@ Secrets 策略: 遵循 ~/claude-soul/protocols/secrets-management.md ——
 """
 
 import os
+import logging
+import secrets
 
-# Flask session secret
-SECRET_KEY = os.environ.get("SECRET_KEY", "change-me-in-production")
+# Flask debug 开关 —— 由 env 控制，默认 False（生产安全）；开发者 export FLASK_DEBUG=1 开启
+DEBUG = os.environ.get("FLASK_DEBUG", "").lower() in {"1", "true", "yes"}
+
+# Flask session secret —— 删除可猜的硬编码默认；env 未设时用随机值保证 session 加密仍可用
+SECRET_KEY = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
+if not os.environ.get("SECRET_KEY"):
+    logging.warning("SECRET_KEY 未设，已生成临时随机值，重启后 session 失效")
 
 # 翻译引擎: 'openrouter' (LLM 多 provider) 或 'google' (Google Translate)
 TRANSLATION_ENGINE = os.environ.get("TRANSLATION_ENGINE", "openrouter")

@@ -212,8 +212,12 @@
       </div>
     </div>
 
-    <!-- Socket.IO -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <!-- Socket.IO（加 SRI 子资源完整性校验，防止 CDN 内容被篡改） -->
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"
+      integrity="sha384-ZCmVL/dTQHh41JxtZe73klDRFSJ/zixGCGt5lhnLQGjSWfAnlXSg+GSnRACaK5lc"
+      crossorigin="anonymous"
+    ></script>
 
     <!-- 服务器端渲染的数据（Jinja模板） -->
     <script>

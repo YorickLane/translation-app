@@ -37,7 +37,9 @@ function escapeHtml(value) {
 }
 
 // Socket.IO 连接
-const socket = io.connect("http://" + document.domain + ":" + location.port + "/test", {
+// 相对连接：同源自动推断协议(http/https)、host、port，避免硬编码 http:// 在 HTTPS/反代下失效；
+// document.domain 已废弃，一并去除。保留原有 reconnection 选项。
+const socket = io("/test", {
     reconnection: true,
     reconnectionAttempts: 10,
     reconnectionDelay: 2000,

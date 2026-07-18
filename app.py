@@ -1,6 +1,6 @@
 # app.py
 
-from translate import create_zip, create_zip_with_structure
+from translate import create_zip, create_zip_with_structure, _get_translate_client
 from translation_runner import translate_single_file
 from llm_models import get_models, get_model_info
 from cost_estimator import estimate_cost, format_cost_summary
@@ -14,7 +14,6 @@ import uuid
 import shutil
 import zipfile
 from functools import lru_cache
-from google.cloud import translate_v2 as translate
 import datetime
 from flask_socketio import SocketIO, emit
 from time import sleep
@@ -81,28 +80,9 @@ def _safe_rmtree(path):
     except Exception as e:
         logger.warning(f"清理目录失败 {path}: {e}")
 
-# Google Translate Client —— lazy init，凭证缺失时降级到 fallback 语言列表
+# Google Translate Client —— lazy init 复用 translate._get_translate_client（单源真相）
+# 凭证缺失时 get_supported_languages 降级到 fallback 语言列表，
 # 这样 OpenRouter 引擎路径不受 Google 凭证影响，独立可用
-_translate_client = None
-
-
-def _get_translate_client():
-    """查找 Google 凭证并 init client。查找优先级见 config.GOOGLE_CREDENTIALS_FILENAMES。"""
-    global _translate_client
-    if _translate_client is None:
-        from config import GOOGLE_CREDENTIALS_FILENAMES
-        # 未显式设 env → 尝试项目根的 fallback 文件 (优先新名字)
-        if not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
-            project_dir = os.path.dirname(os.path.abspath(__file__))
-            for fname in GOOGLE_CREDENTIALS_FILENAMES:
-                candidate = os.path.join(project_dir, fname)
-                if os.path.isfile(candidate):
-                    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = candidate
-                    break
-        # env 仍空时 google-cloud 自动走 gcloud ADC / metadata
-        _translate_client = translate.Client()
-    return _translate_client
-
 
 # 无 Google 凭证时的 fallback 语言列表（覆盖常见 UI 翻译场景）
 _FALLBACK_LANGUAGES = [
@@ -683,7 +663,7 @@ if __name__ == "__main__":
     print("=" * 50)
 
     try:
-        app.run(debug=True, host="127.0.0.1", port=PORT)
+        app.run(debug=config.DEBUG, host="127.0.0.1", port=PORT)
     except OSError as e:
         if e.errno != errno.EADDRINUSE:
             raise
