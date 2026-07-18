@@ -25,7 +25,16 @@ def test_catalog_default_has_pricing():
 
 
 def test_english_keywords_single_source():
-    """两个活模块的英文关键词模式数 == SoT 列表长度（防本地副本回归）。"""
+    """英文关键词检测单一来源（防本地副本回归）。
+
+    编译源在 translation_postprocess（模式数 == SoT 列表长度）；translate_llm 不再
+    自持一份模式,而是直接复用 pp.contains_english_keywords 这个【同一函数对象】——
+    若有人重新在 translate_llm 里本地编译关键词/正则,下面的 `is` 断言会立刻变红。
+    """
     n = len(cfg.QUALITY_CHECK_RULES["english_keywords"])
-    assert len(translate_llm._ENGLISH_KEYWORD_PATTERNS) == n
     assert len(pp._ENGLISH_KEYWORD_PATTERNS) == n
+    # translate_llm 用的就是 pp 的那个函数,不是副本
+    assert translate_llm.contains_english_keywords is pp.contains_english_keywords
+    # 且 translate_llm 不再持有本地关键词模式副本
+    assert not hasattr(translate_llm, "_ENGLISH_KEYWORD_PATTERNS")
+    assert not hasattr(translate_llm, "_ENGLISH_PATTERN")

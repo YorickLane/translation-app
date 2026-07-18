@@ -13,14 +13,13 @@ import os
 import json
 import time
 import logging
-import re
 
 from llm_client import translate_batch
 from config import BATCH_SIZE, REQUEST_DELAY, MAX_RETRIES, DEFAULT_MODEL
-# 英文关键词模式单一来源:直接复用 translation_postprocess 编译的那份,不再本地重编
-# (SoT: translation_config.QUALITY_CHECK_RULES['english_keywords'];
+# 英文关键词检测单一来源:直接复用 translation_postprocess 的 contains_english_keywords,
+# 不在本模块另编关键词/正则。(SoT: translation_config.QUALITY_CHECK_RULES['english_keywords'];
 #  translation_postprocess 只依赖 translation_config,方向无环)
-from translation_postprocess import _ENGLISH_KEYWORD_PATTERNS
+from translation_postprocess import contains_english_keywords
 from js_locale import parse_js_locale, dump_js_locale
 
 try:
@@ -123,27 +122,29 @@ GENERIC_RULE = (
 
 
 # ---------- English 混入检测（非英语目标触发重试） ----------
-
-_ENGLISH_PATTERN = re.compile(r'[A-Za-z]{3,}')
-# 词边界匹配的 _ENGLISH_KEYWORD_PATTERNS 已在顶部从 translation_postprocess 复用导入
-# (避免罗曼语系同源词 cancelar/confirmar/editar/copiar 等被误判为英文混入)。
-# 以前这里有本地重复编译,2026-07-18 收敛到 translation_postprocess 单一来源。
+#
+# 这是"批级粗粒度重试闸":一整批里 >20% 的项含英文 UI 关键词 → 判本批英文过多、重调 LLM。
+# 对【所有】非英语目标生效(含拉丁字母系 es/fr/de/it/pt…),故必须用【词边界关键词匹配】
+# ——绝不能用 translation_postprocess.contains_english 的"可疑拉丁词占比法":那套假定目标
+# 是非拉丁文(CJK/阿语),会把西/法语的合法译文 cancelar/confirmar 全判成英文 → 无限重试。
+#
+# 与之相对的是 translation_postprocess.contains_english(经 _detect_flagged/qa_retranslate 用):
+# "逐项精细 QA 分类器",仅对 strict 的 CJK/阿语目标跑,决定哪几项进人工复审队列。两者【职责/
+# 粒度/适用脚本都不同,刻意分开】。此处只共享底层的关键词检测(contains_english_keywords),
+# 保证"是否含英文 UI 关键词"全项目唯一一份实现;勿把两个闸合并成同一算法。
 
 
 def _contains_too_much_english(translations):
-    """检测翻译结果中是否 >20% 的项目混入明显英文 UI 词。"""
-    total = 0
-    english_hit = 0
-    for value in translations.values():
-        if not isinstance(value, str):
-            continue
-        total += 1
-        if _ENGLISH_PATTERN.search(value):
-            for pattern in _ENGLISH_KEYWORD_PATTERNS:
-                if pattern.search(value):
-                    english_hit += 1
-                    break
-    return total > 0 and english_hit / total > 0.2
+    """批级重试闸:>20% 的字符串项含英文 UI 关键词则判英文过多(触发整批重译)。
+
+    关键词检测复用 translation_postprocess.contains_english_keywords(词边界匹配,
+    避免罗曼语系同源词误判)——单一来源,不在本模块另实现。
+    """
+    values = [v for v in translations.values() if isinstance(v, str)]
+    if not values:
+        return False
+    hits = sum(1 for v in values if contains_english_keywords(v))
+    return hits / len(values) > 0.2
 
 
 # ---------- 核心翻译函数（单批次） ----------
